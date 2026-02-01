@@ -1,5 +1,6 @@
 /* ====== 基本設定 ====== */
-body, html {
+body,
+html {
     margin: 0;
     padding: 0;
     width: 100%;
@@ -7,7 +8,8 @@ body, html {
     overflow: hidden;
     background-color: #f0f2f5;
     font-family: sans-serif;
-    user-select: none; /* テキスト選択防止 */
+    user-select: none;
+    /* テキスト選択防止 */
     touch-action: none;
 }
 
@@ -16,12 +18,17 @@ body, html {
     top: 10px;
     left: 10px;
     z-index: 100;
-    background: rgba(255,255,255,0.8);
+    background: rgba(255, 255, 255, 0.8);
     padding: 10px;
     border-radius: 8px;
     pointer-events: none;
 }
-#ui-layer p { margin: 4px 0; font-size: 14px; color: #555; }
+
+#ui-layer p {
+    margin: 4px 0;
+    font-size: 14px;
+    color: #555;
+}
 
 #canvas-container {
     position: relative;
@@ -36,7 +43,7 @@ body, html {
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 1; 
+    z-index: 1;
 }
 
 /* 線のスタイル */
@@ -46,16 +53,23 @@ body, html {
     fill: none;
     cursor: pointer;
     transition: stroke 0.2s;
+    /* ★追加：ここが魔法のスパイス！ */
+    stroke-linejoin: round;
+    /* 角を丸くする */
+    stroke-linecap: round;
+    /* 線の端っこも丸くする（ついでに！） */
 }
+
 .connection-line:hover {
     stroke: #007bff;
 }
+
 /* 線の当たり判定を広げるための透明な線（テクニック！） */
 .connection-hit-area {
     stroke: transparent;
     stroke-width: 15px;
     fill: none;
-    cursor: crosshair;
+    cursor: pointer;
 }
 
 /* ====== ノード ====== */
@@ -66,16 +80,64 @@ body, html {
     background-color: white;
     border: 2px solid #333;
     border-radius: 6px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: grab;
     z-index: 10;
+    /* ★以下を追加！画像を綺麗に収める魔法 */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
+
 .node:active {
     cursor: grabbing;
     background-color: #f8f9fa;
+}
+
+/* ノードの中にあるリサイズハンドル（普段は隠す） */
+.node .resize-handle {
+    display: none;
+    width: 10px;
+    /* プレビューより少し小さくてもいいかも */
+    height: 10px;
+    border: 1px solid #007bff;
+    background: white;
+    position: absolute;
+    z-index: 20;
+    border-radius: 50%;
+}
+
+/* ノードが selected クラスを持ったら表示する！ */
+.node.selected .resize-handle {
+    display: block;
+}
+
+/* 各ハンドルの位置（プレビュー用と同じクラス名を流用するわ） */
+.node .resize-handle.nw {
+    top: -5px;
+    left: -5px;
+    cursor: nw-resize;
+}
+
+.node .resize-handle.ne {
+    top: -5px;
+    right: -5px;
+    cursor: ne-resize;
+}
+
+.node .resize-handle.sw {
+    bottom: -5px;
+    left: -5px;
+    cursor: sw-resize;
+}
+
+.node .resize-handle.se {
+    bottom: -5px;
+    right: -5px;
+    cursor: se-resize;
 }
 
 /* ====== ハンドル・マーカー ====== */
@@ -91,10 +153,16 @@ body, html {
     cursor: grab;
     z-index: 20;
 }
+
 .line-handle:hover {
     background-color: #007bff;
     border-color: #007bff;
     transform: translate(-50%, -50%) scale(1.2);
+}
+
+.line-handle:active,
+.waypoint:active {
+    cursor: grabbing;
 }
 
 /* 中継点（ウェイポイント） */
@@ -117,7 +185,8 @@ body, html {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 30px; /* 見た目は10pxだけど、判定は30px！ */
+    width: 30px;
+    /* 見た目は10pxだけど、判定は30px！ */
     height: 30px;
     transform: translate(-50%, -50%);
     /* background: rgba(255,0,0,0.2); デバッグ用：赤く表示してみると大きさがわかるよ */
@@ -129,23 +198,29 @@ body, html {
     position: absolute;
     width: 16px;
     height: 16px;
-    background-color: rgba(0, 123, 255, 0.5); /* 半透明の青 */
+    background-color: rgba(0, 123, 255, 0.5);
+    /* 半透明の青 */
     border: 2px solid #007bff;
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    z-index: 100; /* 最前面 */
-    pointer-events: none; /* クリックを邪魔しない */
+    z-index: 100;
+    /* 最前面 */
+    pointer-events: none;
+    /* クリックを邪魔しない */
 }
+
+
 
 /* ====== ツールバー ====== */
 #toolbar {
     position: absolute;
-    top: 80px; /* ヒントの下 */
+    top: 80px;
+    /* ヒントの下 */
     left: 10px;
     background: white;
     padding: 8px;
     border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     display: flex;
     gap: 8px;
     z-index: 100;
@@ -169,7 +244,7 @@ body, html {
 .tool-btn:hover {
     background: #e2e6ea;
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .tool-btn:active {
@@ -185,7 +260,594 @@ body, html {
 
 /* 選択されたノードのスタイル（青枠で強調） */
 .node.selected {
-    border-color: #007bff;
+    border-color: #007bff !important;
     box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3);
     background-color: #f0f7ff;
+}
+
+
+/* ====== コンテキストメニュー（プロパティ設定パネル） ====== */
+#context-menu {
+    position: absolute;
+    width: 320px;
+    /* ★幅を広げたわ（280px -> 320px） */
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: none;
+    font-size: 13px;
+    /* 少し文字を小さく */
+    color: #333;
+    animation: fadeIn 0.2s ease-out;
+    overflow: hidden;
+    /* 角丸からはみ出さないように */
+    padding-top: 0;
+    /* 余計な隙間を消す */
+}
+
+/* ★追加：新しい持ち手エリア */
+.drag-handle {
+    width: 100%;
+    height: 24px;
+    /* 指でも掴みやすい高さ */
+    background: #f0f2f5;
+    /* 少し濃いグレーで区別 */
+    border-bottom: 1px solid #e1e4e8;
+    cursor: move;
+    /* ここが「掴める」カーソル！ */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* ★追加：持ち手の真ん中にある棒（デザインアクセント） */
+.handle-bar {
+    width: 40px;
+    height: 4px;
+    background: #ccc;
+    border-radius: 2px;
+}
+
+/* 持ち手をホバーしたら少し濃くする（インタラクション） */
+.drag-handle:hover .handle-bar {
+    background: #999;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ヘッダー（プレビューエリア） */
+.menu-header {
+    background: #f8f9fa;
+    padding: 15px;
+    /* 余白削減 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-bottom: 1px solid #e1e4e8;
+    position: relative;
+    overflow: visible;
+    z-index: 10;
+    cursor: default;
+    background: white;
+    /* 背景色は白ですっきり */
+    border-top: none;
+    /* 上の線はハンドルとの境界線に任せる */
+}
+
+/* プレビュー用の箱 */
+.node-preview {
+    cursor: default;
+    /* 初期サイズはJSで制御するけど、基本スタイルはこれ */
+    position: relative;
+    background: white;
+    border: 2px solid #333;
+    border-radius: 6px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.1s;
+    /* リアルタイム反映を滑らかに */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* メニューの本文エリア */
+.menu-body {
+    padding: 12px;
+    /* 余白削減 */
+}
+
+/* ★大改造：セクションを横並びに！ */
+.menu-section {
+    display: flex;
+    /* 横並びにする魔法 */
+    align-items: center;
+    /* 上下中央揃え */
+    margin-bottom: 8px;
+    /* 下の隙間をギュッと詰める */
+    gap: 10px;
+    /* ラベルと中身の間の隙間 */
+}
+
+/* ラベルのスタイル */
+.menu-label {
+    width: 60px;
+    /* 左側の幅を固定 */
+    flex-shrink: 0;
+    /* 縮まないように */
+    text-align: right;
+    /* 右揃えで見やすく */
+    margin-bottom: 0;
+    /* 下の隙間なし */
+    font-weight: bold;
+    color: #666;
+    font-size: 11px;
+}
+
+/* 右側の入力・パレットなどを自動で広げる */
+.menu-section>input,
+.menu-section>textarea,
+.menu-section>.size-inputs,
+.menu-section>.color-palette,
+.menu-section>.toggle-group,
+.menu-section>button {
+    flex-grow: 1;
+}
+
+/* テキストエリアの調整 */
+#input-label {
+    resize: none;
+    /* サイズ変更ハンドルを消す（見た目スッキリ） */
+    height: 28px;
+    /* 1行分の高さに固定 */
+    line-height: 1.2;
+}
+
+#input-label:focus {
+    height: 50px;
+    /* 入力中だけ広がるギミック！ */
+    position: absolute;
+    /* 他を押し下げないように浮かせる */
+    z-index: 100;
+    width: 200px;
+    /* 幅も少し広げる */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* サイズ入力欄 */
+.size-inputs {
+    display: flex;
+    gap: 5px;
+}
+
+.size-inputs input {
+    width: 100%;
+    padding: 4px;
+    text-align: center;
+}
+
+/* アクションボタン（削除など） */
+.menu-actions {
+    border-top: 1px solid #e1e4e8;
+    padding: 10px;
+    background: #fcfcfc;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn-danger {
+    background: white;
+    border: 1px solid #ffcccc;
+    color: #d93025;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.btn-danger:hover {
+    background: #ffebe9;
+}
+
+/* ====== メニュー操作系 ====== */
+
+/* プレビュー箱のリサイズハンドル共通設定 */
+.resize-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: white;
+    border: 1px solid #007bff;
+    border-radius: 50%;
+    /* 丸くする */
+    z-index: 10;
+}
+
+/* 各コーナーの配置とカーソル */
+.resize-handle.nw {
+    top: -6px;
+    left: -6px;
+    cursor: nw-resize;
+}
+
+.resize-handle.ne {
+    top: -6px;
+    right: -6px;
+    cursor: ne-resize;
+}
+
+.resize-handle.sw {
+    bottom: -6px;
+    left: -6px;
+    cursor: sw-resize;
+}
+
+.resize-handle.se {
+    bottom: -6px;
+    right: -6px;
+    cursor: se-resize;
+}
+
+/* ハンドルはプレビュー箱より上、でもメニューの他の要素と喧嘩しないように */
+.node-preview {
+    /* 既存のスタイルにこれを追加・確認してね */
+    position: relative;
+    /* これがないとハンドルが飛んでいく */
+}
+
+/* ====== テキスト自由配置 ====== */
+
+/* プレビュー内のテキスト */
+#preview-text {
+    position: absolute;
+    /* 自由に動くために必要 */
+    cursor: move;
+    /* 掴めるよ！というアイコン */
+    user-select: none;
+    /* ドラッグ中に文字選択されないように */
+    transform: translate(-50%, -50%);
+    /* 座標の中心を文字の真ん中にするテクニック */
+    white-space: pre;
+    /* 改行を有効化 */
+    text-align: center;
+    /* 文字は中央揃え */
+    line-height: 1.2;
+    /* 行間を少し詰める */
+    /* デフォルトの位置（JSで上書きされるけど念のため） */
+    width: max-content;
+    top: 50%;
+    left: 50%;
+}
+
+/* 実際のノード内のテキスト（新しくspanタグで囲むようにするわ） */
+.node-label-real {
+    position: absolute;
+    pointer-events: auto;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    color: #333;
+    white-space: pre;
+    /* 改行を有効化 */
+    text-align: center;
+    line-height: 1.2;
+
+    /* 重要：はみ出しても表示されるように！ */
+    overflow: visible;
+    width: max-content;
+    cursor: grab;
+}
+
+.node.selected .node-label-real:hover {
+    cursor: move;
+    /* 選択中は「動かせるよ」アイコン */
+}
+
+/* ====== 色・影の設定パネル ====== */
+
+/* カラーパレット */
+.color-palette {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 4px;
+    padding: 0;
+    margin: 0;
+    /* マージン削除 */
+}
+
+.color-btn {
+    width: 22px;
+    /* 少し小さく */
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    position: relative;
+    margin: 0 auto;
+}
+
+.color-btn:hover {
+    transform: scale(1.1);
+}
+
+.color-btn.active::after {
+    content: '✔';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    color: #555;
+    text-shadow: 0 0 2px white;
+}
+
+/* 透明の表現（斜線） */
+.color-btn.transparent {
+    background: linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%),
+        linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 4px 4px;
+    background-color: white;
+}
+
+/* トグルボタン（影設定） */
+.toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* トグルボタン */
+.toggle-group {
+    display: flex;
+    background: #e9ecef;
+    border-radius: 4px;
+    padding: 2px;
+    justify-content: center;
+    /* 中央寄せ */
+}
+
+.toggle-group button {
+    border: none;
+    background: transparent;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 3px;
+    color: #555;
+    transition: all 0.2s;
+}
+
+.toggle-group button.active {
+    background: white;
+    color: #007bff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    font-weight: bold;
+}
+
+/* 入力欄とボタンを横並びにするコンテナ */
+.input-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+}
+
+/* 入力欄の微調整（幅を狭く） */
+.input-row input[type="number"] {
+    width: 40px;
+    padding: 4px;
+    text-align: center;
+    flex-grow: 0;
+    /* 勝手に伸びないように */
+}
+
+/* アイコンボタン（太字ボタンなど） */
+.icon-btn {
+    border: 1px solid #ddd;
+    background: #f8f9fa;
+    border-radius: 4px;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-weight: bold;
+    color: #555;
+    margin-left: auto;
+    /* 右端に寄せる */
+    transition: all 0.2s;
+}
+
+.icon-btn:hover {
+    background: #e2e6ea;
+}
+
+/* ONになった時のスタイル */
+.icon-btn.active {
+    background-color: #333;
+    color: white;
+    border-color: #333;
+}
+
+
+/* 線用プレビューのコンテナ */
+#preview-conn-container {
+    width: 280px;
+    /* メニュー幅に合わせる */
+    height: 100px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+/* ラベルの背景矩形 */
+#preview-conn-label-bg {
+    transition: fill 0.2s;
+}
+
+/* style.css の末尾に追加 */
+
+/* 縦書き用クラス */
+.vertical-text {
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    /* 文字を正立させる（日本語向き） */
+}
+
+/* プレビュー内のSVGラベルのカーソル */
+#preview-conn-label {
+    cursor: move;
+    user-select: none;
+}
+
+/* ====== 複製ボタン ====== */
+.header-action-btn {
+    position: absolute;
+    top: 30px;   /* ハンドルの高さ(24px) + 少し余白 */
+    right: 6px; /* 右端からの距離 */
+    width: 32px;
+    height: 32px;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    color: #555;
+    z-index: 200; /* プレビューより手前に表示 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.2s;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.header-action-btn:hover {
+    background-color: #f0f7ff;
+    color: #007bff;
+    border-color: #007bff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.header-action-btn:active {
+    transform: translateY(0);
+}
+
+/* ====== マルチボックス用追加スタイル ====== */
+
+/* 透過率スライダーの見た目調整 */
+input[type=range] {
+    -webkit-appearance: none; /* 標準のスタイルをリセット */
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+    margin: 0;
+}
+/* トラック（溝） */
+input[type=range]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    background: #e9ecef;
+    border-radius: 3px;
+}
+/* つまみ */
+input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    background: #007bff;
+    margin-top: -5px; /* トラックの中央に来るように調整 */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+/* 破線スタイルのクラス（JSで制御するけどCSSでも用意しておくと便利） */
+.node.dashed {
+    border-style: dashed !important;
+}
+
+/* テキスト配置用のクラス */
+.text-left { text-align: left !important; }
+.text-center { text-align: center !important; }
+.text-right { text-align: right !important; }
+
+/* プレビュー内のテキストエリア（ボックス用）の微調整 */
+/* ボックスは「文章」を入れることが多いから、プレビューでも見やすく */
+#preview-text {
+    /* これまでの設定に加えて、word-breakを追加 */
+    word-break: break-word; 
+    /* 配置はJSで style.textAlign を直接いじるのでここでは基本設定のみ */
+}
+
+
+/* ====== アコーディオン ====== */
+.accordion-item {
+    border-bottom: 1px solid #eee;
+}
+.accordion-item:last-child {
+    border-bottom: none;
+}
+
+.accordion-header {
+    padding: 10px 12px;
+    background: #fcfcfc;
+    cursor: pointer;
+    font-weight: bold;
+    color: #555;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    transition: background 0.2s;
+}
+.accordion-header:hover {
+    background: #f0f7ff;
+    color: #007bff;
+}
+
+/* 三角アイコン */
+.accordion-icon {
+    font-size: 10px;
+    transition: transform 0.2s;
+    color: #999;
+}
+.accordion-item.open .accordion-icon {
+    transform: rotate(180deg); /* 開くとくるっと回る */
+}
+
+/* 中身（最初は隠しておく） */
+.accordion-content {
+    display: none;
+    padding: 10px 0; /* 上下の余白 */
+    background: white;
+    border-top: 1px solid #f5f5f5;
+}
+.accordion-item.open .accordion-content {
+    display: block;
+    animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* アコーディオンの中のセクションは余白調整 */
+.accordion-content .menu-section {
+    padding: 0 12px; /* 横の余白だけ確保 */
 }
