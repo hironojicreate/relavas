@@ -1,7 +1,7 @@
 // script.js
 
 // ====== 設定・定数 ======
-const ANCHOR_COUNT = 9;
+const ANCHOR_COUNT = 21;
 const SNAP_DISTANCE = 30;
 
 // ====== 便利関数（マウス・タッチ共通化） ======
@@ -40,46 +40,47 @@ function hexToRgba(hex, opacity100) {
     return 'rgba(' + [(c >> 16) & 255, (c >> 8) & 255, c & 255].join(',') + ',' + a + ')';
 }
 
-// 2. ノードデータ
+// 2. ノードデータ（A4ガイド対応：中央配置版）
 let nodes = [
-    // 1. リラ（左上）
+    // 1. リラ（左上）- 60px正方形
     {
-        id: "node-a", x: 380, y: 150, label: "リラ",
-        style: { width: 90, height: 90, backgroundColor: "#ffffff" },
-        text: { x: 45, y: 70 }
+        id: "node-a", x: 400, y: 200, // ガイド中央へ移動 (+250, +100)
+        label: "リラ",
+        style: { width: 60, height: 60, backgroundColor: "#ffffff" },
+        text: { x: 30, y: 35 }
     },
-    // 2. ヴァス（右下）
+    // 2. ヴァス（右下）- 60px正方形
     {
-        id: "node-b", x: 680, y: 350, label: "ヴァス",
-        style: { width: 90, height: 90, backgroundColor: "#ffffff" },
-        text: { x: 45, y: 70 }
+        id: "node-b", x: 650, y: 340, // ガイド中央へ移動
+        label: "ヴァス",
+        style: { width: 60, height: 60, backgroundColor: "#ffffff" },
+        text: { x: 30, y: 35 }
     },
-    // 3. リラヴァス（リラの下・ヴァスの左）
+    // 3. リラヴァス（リラの下・ヴァスの左）- 70px正方形
     {
-        id: "node-c", x: 380, y: 350,
+        id: "node-c", x: 395, y: 330, // ガイド中央へ移動
         label: "リラヴァス\n世界を見守る者",
         style: {
-            width: 100, height: 100,
+            width: 70, height: 70, // ヒロさんの設定を維持
             backgroundColor: "#e1bee7",
             borderColor: '#333333',
             borderWidth: 2
         },
         text: {
-            x: 50, y: 50,
+            x: 35, y: 72, // ★微調整：70pxの真ん中は35なので合わせました
             color: '#333333',
-            fontSize: 14
+            fontSize: 13
         }
     },
 
-
-    // 4. チュートリアル説明書（※タイトルより先に描画＝下に敷く）
+    // 4. チュートリアル説明書
     {
         id: "tutorial-box",
         type: 'box',
-        x: 350, y: 500,
-        label: "【基本操作ガイド】\n\n🔧 追加: 右上のボタンから\n📝 編集: 右クリック\n\n✨ 便利技:\n・線をクリック … 関節（折れ点）を追加\n・関節をダブルクリック … 関節（折れ点）を削除\n・Shift押しながら … 直角に配置",
+        x: 360, y: 470, // ガイド中央へ移動
+        label: "【基本操作】\n\n📝 部品編集: 右クリック\n🖐️ 移動: 背景ドラッグ\n📦 まとめて移動: 右クリック＋ドラッグ\n\n✨ 便利技:\n・線クリック: 曲がり角追加\n・線ダブルクリック: 曲がり角削除\n・Shiftドラッグ: 直角配置",
         style: {
-            width: 450, height: 260,
+            width: 380, height: 180,
             borderColor: '#007bff',
             borderWidth: 2,
             borderStyle: 'dashed',
@@ -93,43 +94,42 @@ let nodes = [
             fontWeight: 'normal',
             align: 'left',
             bgColor: 'transparent',
-            x: 225, y: 130
+            x: 190, y: 90
         }
     },
-    // 5. ★移動：タイトル用ボックス（一番最後＝最前面！）
+    // 5. タイトルボックス
     {
         id: "title-box",
         type: 'box',
-        // 説明書(x350, w450)の中央 => x425
-        // 説明書の上辺(y500)にまたがる => y460
-        x: 425, y: 460,
-        label: "まずは、\n矢印を動かしてみよう！",
+        x: 430, y: 420, // ガイド中央へ移動
+        label: "矢印を動かしてみよう！",
         style: {
-            width: 300, height: 80,
+            width: 240, height: 50,
             borderColor: 'transparent',
-            backgroundColor: '#fff176', // 黄色
+            backgroundColor: '#fff176',
             opacity: 100,
-            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+            boxShadow: '0 3px 5px rgba(0,0,0,0.1)'
         },
         text: {
-            color: '#e65100', // オレンジ
-            fontSize: 20,
+            color: '#e65100',
+            fontSize: 16,
             fontWeight: 'bold',
             align: 'center',
             bgColor: 'transparent',
-            x: 150, y: 40
+            x: 120, y: 25
         }
     }
 ];
 
-// 線データ（ヒロさんの設定そのまま）
+// 線データ
 let connections = [
     {
         id: "conn-tutorial",
-        start: { type: "anchor", nodeId: "node-a", side: "right", index: 4 },
-        end: { type: "anchor", nodeId: "node-b", side: "top", index: 4 },
+        start: { type: "anchor", nodeId: "node-a", side: "right", index: 10 },
+        end: { type: "anchor", nodeId: "node-b", side: "top", index: 10 },
         waypoints: [
-            { x: 725, y: 195 }
+            // リラのY中心(200+30=230) と ヴァスのX中心(650+30=680) の交点
+            { x: 680, y: 230 }
         ],
         style: {
             color: '#555',
@@ -139,73 +139,44 @@ let connections = [
         },
         label: {
             text: "協力関係",
-            fontSize: 16,
+            fontSize: 12,
             color: '#333',
             bgColor: '#ffffff',
             offsetX: 0,
-            offsetY: -82
+            offsetY: -60 // 位置をリセット（直角線の真上に来るように）
         }
     }
 ];
-
-/*
-// 2. ノードデータ（人物リスト）
-// HTMLからデータをここに引っ越したの。
-let nodes = [
-    {
-        id: "node-a", x: 400, y: 300, label: "人物A",
-        style: { width: 120, height: 60, backgroundColor: "#ffffff" },
-        text: { x: 60, y: 30 }
-    },
-    {
-        id: "node-b", x: 700, y: 200, label: "人物B",
-        style: { width: 120, height: 60, backgroundColor: "#ffffff" },
-        text: { x: 60, y: 30 }
-    },
-    {
-        id: "node-c", x: 400, y: 550, label: "人物C",
-        style: { width: 120, height: 60, backgroundColor: "#ffffff" },
-        text: { x: 60, y: 30 }
-    },
-    {
-        id: "node-d", x: 100, y: 300, label: "人物D",
-        style: { width: 120, height: 60, backgroundColor: "#ffffff" },
-        text: { x: 60, y: 30 }
-    }
-];
-
-// 3.線データ
-let connections = [
-    {
-        id: "conn-1",
-        start: { type: "anchor", nodeId: "node-a", side: "top", index: 4 },
-        end: { type: "anchor", nodeId: "node-b", side: "left", index: 4 },
-        waypoints: []
-    },
-    {
-        id: "conn-2",
-        start: { type: "anchor", nodeId: "node-d", side: "right", index: 4 },
-        end: { type: "point", x: 250, y: 350 },
-        waypoints: []
-    }
-];*/
 
 // 4. アプリ全体の保存用設定
 let appSettings = {
     backgroundColor: '#f0f2f5' // 初期色
 };
 
-// ====== グローバル変数 ======
-const container = document.getElementById('canvas-container');
+// ====== グローバル変数（追加分） ======
+
+const canvasContainer = document.getElementById('canvas-container'); // 外枠
+const container = document.getElementById('world-layer'); // ★変更：中身（これが動く）
 const svgLayer = document.getElementById('svg-layer');
 const snapGuide = document.getElementById('snap-guide');
 
+// ★追加：ビューポート（視点）管理
+let viewport = { x: 0, y: 0 };
+let isPanning = false; // パン操作中フラグ
+let panStart = { x: 0, y: 0 };
 let isDragging = false;
 let currentDragTarget = null;
 let dragInfo = null;
 let dragOffset = { x: 0, y: 0 };
 let selectedId = null; // 今選択されているノードのID（なければnull）
 let selectedConnId = null;
+
+let selectedNodeIds = new Set(); // 複数選択用のIDリスト（Setを使うと重複しないの！）
+let isSelecting = false;         // 範囲選択中かどうかのフラグ
+let selectionStart = { x: 0, y: 0 }; // 範囲選択の開始位置
+let selectionBoxEl = null;       // 範囲選択の見た目要素
+let selectedConnIds = new Set(); // ★追加：複数の矢印IDを管理する変数
+
 
 
 // ====== 初期化処理（ノード生成） ======
@@ -404,29 +375,47 @@ function createNodeElement(nodeData) {
 
 
 // ★追加：線を選択する関数
-function selectConnection(id) {
-    selectedConnId = id;
-
-    // 線の見た目を変える（青くするとか）処理は render() でやるので、
-    // ここでは再描画を呼ぶだけでOK
-    render();
-}
-
-// 既存の selectNode 関数もちょっと修正！
-// 人物を選んだら、線の選択は外したいわよね？
-function selectNode(id) {
-    selectedId = id;
-    if (id) {
-        selectedConnId = null; // ★追加：人物を選んだら線はキャンセル
+function selectConnection(id, addToSelection = false) {
+    // 追加選択モードじゃないなら、一旦リセット
+    if (!addToSelection) {
+        selectedConnIds.clear();
+        selectedNodeIds.clear(); // 線を選ぶときはノード選択も解除するのが一般的
+        document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
+        selectedId = null;
     }
 
-    document.querySelectorAll('.node').forEach(el => el.classList.remove('selected'));
     if (id) {
+        selectedConnIds.add(id);
+        selectedConnId = id; // プロパティパネル用（最後の1つ）
+    } else {
+        selectedConnId = null;
+    }
+
+    render(); // 画面更新
+}
+
+// selectNode 関数（書き換え）
+
+function selectNode(id, addToSelection = false) {
+    // addToSelection が false (通常クリック) なら、他の選択を解除
+    if (!addToSelection) {
+        selectedNodeIds.clear();
+        // DOM上のクラスも全部消す
+        document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
+    }
+
+    selectedId = id; // プロパティパネル用（最後に選んだやつ）
+
+    if (id) {
+        // 線を選んでいたら解除
+        if (!addToSelection) selectedConnId = null;
+
+        selectedNodeIds.add(id);
         const el = document.getElementById(id);
         if (el) el.classList.add('selected');
     }
-    // ★追加：ハンドルの表示/非表示を更新するために再描画
-    render();
+
+    render(); // 線の選択状態などを更新
 }
 
 
@@ -827,7 +816,7 @@ function render() {
 
 
 // 線を描画する関数
-// drawConnection 関数（文字位置微調整版）
+// drawConnection 関数（矢印ヒット判定修正版）
 function drawConnection(conn, updatedIds) {
     // 1. 基本座標
     let startPos = (conn.start.type === 'anchor')
@@ -847,6 +836,7 @@ function drawConnection(conn, updatedIds) {
     const arrowLen = arrowBaseSize * 1.3;
     const gapSize = arrowLen + 4;
 
+    // 矢印がある場合、線を少し短くする（矢印のスペース確保）
     if (style.arrow === 'start' || style.arrow === 'both') {
         const nextPoint = (conn.waypoints.length > 0) ? conn.waypoints[0] : endPos;
         startPos = movePointTowards(startPos, nextPoint, gapSize);
@@ -861,8 +851,9 @@ function drawConnection(conn, updatedIds) {
     conn.waypoints.forEach(wp => { d += ` L ${wp.x} ${wp.y}`; });
     d += ` L ${endPos.x} ${endPos.y}`;
 
-    // 3. マーカー定義
-    const markerColor = (conn.id === selectedConnId) ? '#007bff' : (style.color || '#555');
+    // 3. マーカー定義（見た目用のみ！）
+    const isSelected = (conn.id === selectedConnId || selectedConnIds.has(conn.id));
+    const markerColor = isSelected ? '#007bff' : (style.color || '#555');
     const markerEndId = `marker-end-${conn.id}`;
     const markerStartId = `marker-start-${conn.id}`;
 
@@ -872,7 +863,7 @@ function drawConnection(conn, updatedIds) {
         svgLayer.insertBefore(defs, svgLayer.firstChild);
     }
 
-    // 終点矢印（→）
+    // 終点矢印（→）の定義
     let markerEnd = document.getElementById(markerEndId);
     if (!markerEnd) {
         markerEnd = document.createElementNS("http://www.w3.org/2000/svg", "marker");
@@ -892,7 +883,8 @@ function drawConnection(conn, updatedIds) {
     );
     markerEnd.querySelector('path').setAttribute("fill", markerColor);
 
-    // 始点矢印（←）
+
+    // 始点矢印（←）の定義
     let markerStart = document.getElementById(markerStartId);
     if (!markerStart) {
         markerStart = document.createElementNS("http://www.w3.org/2000/svg", "marker");
@@ -912,33 +904,66 @@ function drawConnection(conn, updatedIds) {
     );
     markerStart.querySelector('path').setAttribute("fill", markerColor);
 
-    // 4. 透明な当たり判定
+
+    // 4. 透明な当たり判定（hitPath）
+    // ★修正：透明マーカーは廃止！純粋に「太い線」として機能させるわ
     const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
     hitPath.setAttribute("d", d);
     hitPath.setAttribute("class", "connection-hit-area");
-    hitPath.style.cursor = (conn.id === selectedConnId) ? 'crosshair' : 'pointer';
-    hitPath.onclick = (e) => onLineClick(e, conn);
+    hitPath.style.cursor = isSelected ? 'crosshair' : 'pointer';
+
+    // イベント登録
+    // hitPath.onclick = (e) => onLineClick(e, conn);
+    hitPath.onmousedown = (e) => handleLineMouseDown(e, conn);
     hitPath.addEventListener('contextmenu', (e) => {
         e.preventDefault(); e.stopPropagation();
         selectConnection(conn.id);
         openContextMenu(conn, 'connection', e.clientX, e.clientY);
     });
-    /*
-    hitPath.addEventListener('dblclick', (e) => {
-        e.preventDefault(); 
-        e.stopPropagation();
-        
-        selectConnection(conn.id);
-        openContextMenu(conn, 'connection', e.clientX, e.clientY);
-    });*/
+
     svgLayer.appendChild(hitPath);
+
+    // ★★★ ここが新機能！透明な丸を矢印の位置に置く ★★★
+    const createHitCircle = (pos) => {
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", pos.x);
+        circle.setAttribute("cy", pos.y);
+        circle.setAttribute("r", 15); // 半径15pxの当たり判定（矢印を十分カバーするわ）
+        circle.setAttribute("fill", "transparent");
+
+        // CSSでポインターイベントを強制的に有効化！
+        circle.style.pointerEvents = "all";
+        circle.style.cursor = "pointer";
+
+        // イベントは線と同じものを登録
+        // circle.onclick = (e) => onLineClick(e, conn);
+        circle.onmousedown = (e) => handleLineMouseDown(e, conn);
+        circle.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectConnection(conn.id);
+            openContextMenu(conn, 'connection', e.clientX, e.clientY);
+        });
+
+        svgLayer.appendChild(circle);
+    };
+
+    // 矢印がある側にだけ丸を生成
+    if (style.arrow === 'start' || style.arrow === 'both') {
+        createHitCircle(startPos);
+    }
+    if (style.arrow === 'end' || style.arrow === 'both') {
+        createHitCircle(endPos);
+    }
+    // ★★★ ここまで ★★★
+
 
     // 5. 見た目用の線
     const visualPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
     visualPath.setAttribute("d", d);
     visualPath.setAttribute("class", "connection-line");
     visualPath.style.pointerEvents = "none";
-    visualPath.style.stroke = (conn.id === selectedConnId) ? '#007bff' : style.color;
+    visualPath.style.stroke = isSelected ? '#007bff' : style.color;
     visualPath.style.strokeWidth = w;
     if (style.dash === 'dashed') {
         const dashLen = w * 4;
@@ -953,6 +978,7 @@ function drawConnection(conn, updatedIds) {
     }
     svgLayer.appendChild(visualPath);
 
+
     // 6. ラベル（文字）の描画
     if (conn.label && conn.label.text) {
         const l = conn.label;
@@ -962,17 +988,15 @@ function drawConnection(conn, updatedIds) {
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
         text.textContent = l.text;
 
-        // ★修正ポイント：文字位置の微調整
+        // 文字位置の微調整
         let adjX = 0;
         let adjY = 0;
 
         if (l.isVertical) {
             text.setAttribute("class", "vertical-text");
-            // 縦書き：右に寄るのを防ぐため、少し左へ(-2)
             adjX = -1;
             adjY = 0;
         } else {
-            // 横書き：上に寄るのを防ぐため、少し下へ(+1)
             adjX = 0;
             adjY = 1;
         }
@@ -984,24 +1008,17 @@ function drawConnection(conn, updatedIds) {
         text.setAttribute("font-size", l.fontSize || 12);
         text.setAttribute("font-weight", l.fontWeight || 'normal');
         text.setAttribute("text-anchor", "middle");
-
-        // ★変更：基準線を 'middle' から 'central' に変更（日本語の中央に合いやすい）
         text.setAttribute("dominant-baseline", "central");
 
-        text.addEventListener('contextmenu', (e) => {
-            e.preventDefault(); // 標準メニューをキャンセル
-            e.stopPropagation();
-            selectConnection(conn.id); // 線を選択状態にする
-            openContextMenu(conn, 'connection', e.clientX, e.clientY); // メニューを開く
-        });
-
-
-        // ★修正：選択状態に関わらず、常にイベントを受け付ける
-        text.style.pointerEvents = "all"; 
-        text.style.cursor = (conn.id === selectedConnId) ? "move" : "pointer"; // 未選択なら指カーソル
-        
-        // 常にドラッグ（インタラクション）登録
+        text.style.pointerEvents = "all";
+        text.style.cursor = (conn.id === selectedConnId) ? "move" : "pointer";
         registerInteraction(text, { type: 'conn-label', connId: conn.id });
+
+        text.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            selectConnection(conn.id);
+            openContextMenu(conn, 'connection', e.clientX, e.clientY);
+        });
 
         if (l.bgColor && l.bgColor !== 'transparent') {
             const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -1010,7 +1027,6 @@ function drawConnection(conn, updatedIds) {
             if (l.isVertical) { wRect = fSize + 10; hRect = l.text.length * fSize + 10; }
             else { wRect = l.text.length * fSize + 10; hRect = fSize + 10; }
 
-            // 背景は cx, cy を中心に描画（ここはズレてないはずなのでそのまま）
             bg.setAttribute("x", cx - wRect / 2);
             bg.setAttribute("y", cy - hRect / 2);
             bg.setAttribute("width", wRect);
@@ -1018,17 +1034,15 @@ function drawConnection(conn, updatedIds) {
             bg.setAttribute("fill", l.bgColor);
             bg.setAttribute("rx", 4);
 
-            bg.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                selectConnection(conn.id);
-                openContextMenu(conn, 'connection', e.clientX, e.clientY);
-            });
-
-            // ★追加：背景も常にイベント有効
             bg.style.pointerEvents = 'all';
             bg.style.cursor = (conn.id === selectedConnId) ? "move" : "pointer";
             registerInteraction(bg, { type: 'conn-label', connId: conn.id });
+
+            bg.addEventListener('contextmenu', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                selectConnection(conn.id);
+                openContextMenu(conn, 'connection', e.clientX, e.clientY);
+            });
 
             svgLayer.appendChild(bg);
         }
@@ -1061,7 +1075,7 @@ function createOrUpdateHandle(conn, type, pos, updatedIds) {
         el.addEventListener('contextmenu', (e) => {
             e.preventDefault(); // 標準メニューを出さない
             e.stopPropagation(); // 後ろのキャンバスに反応させない
-            
+
             // この線を選択状態にして、メニューを開く
             selectConnection(conn.id);
             openContextMenu(conn, 'connection', e.clientX, e.clientY);
@@ -1069,12 +1083,15 @@ function createOrUpdateHandle(conn, type, pos, updatedIds) {
         container.appendChild(el);
     }
 
-    // 表示制御
-    // このハンドルが属する線(conn.id)が、今選ばれている(selectedConnId)なら表示
+    el.style.display = 'block';
+
+    // その代わり、選択状態によって「透明度」と「触れるかどうか」を制御するの！
     if (conn.id === selectedConnId) {
-        el.style.display = 'block';
+        el.style.opacity = '1';          // 見える
+        el.style.pointerEvents = 'auto'; // 触れる
     } else {
-        el.style.display = 'none';
+        el.style.opacity = '0';          // 透明
+        el.style.pointerEvents = 'auto'; // ★重要：透明でも触れる！
     }
 
     // あれば（または作った直後に）位置だけ更新
@@ -1122,11 +1139,14 @@ function createOrUpdateWaypoint(conn, index, pos, updatedIds) {
         container.appendChild(el);
     }
 
-    // 表示制御
+    el.style.display = 'block';
+
     if (conn.id === selectedConnId) {
-        el.style.display = 'block';
+        el.style.opacity = '1';
+        el.style.pointerEvents = 'auto';
     } else {
-        el.style.display = 'none';
+        el.style.opacity = '0';
+        el.style.pointerEvents = 'auto'; // 透明でも掴めるように！
     }
 
     el.style.left = pos.x + 'px';
@@ -1174,22 +1194,25 @@ window.addEventListener('mouseup', () => {
 
 // 2. 「＋ 矢印」ボタン（独立した線を生成）
 document.getElementById('btn-add-conn').addEventListener('click', () => {
-    // 画面中央あたりに線を生成
-    // 誰ともつながっていない「自由な線」を作るわ
-    const cx = window.innerWidth / 2;
-    const cy = window.innerHeight / 2;
+    // 画面中央あたりを基準に、ランダムにずらして配置するわ
+    // (-100 〜 +100 の範囲でズレるようにしたの)
+    const offsetX = (Math.random() * 200) - 100;
+    const offsetY = (Math.random() * 200) - 100;
+
+    const cx = (window.innerWidth / 2) + offsetX;
+    const cy = (window.innerHeight / 2) + offsetY;
 
     const newConn = {
         id: generateId(),
         // 始点と終点を座標指定で作る
-        start: { type: 'point', x: cx - 100, y: cy },
-        end: { type: 'point', x: cx + 100, y: cy },
+        start: { type: 'point', x: cx - 60, y: cy },
+        end: { type: 'point', x: cx + 60, y: cy },
         waypoints: [],
         style: {
             color: '#555',
             width: 2,
             dash: 'solid',
-            arrow: 'end' // デフォルトで矢印つきにしてみた！
+            arrow: 'end' // デフォルトで矢印つき
         },
         label: {
             text: "新規の線",
@@ -1203,6 +1226,9 @@ document.getElementById('btn-add-conn').addEventListener('click', () => {
     // 追加した線を即選択！
     selectNode(null); // ノード選択解除
     selectConnection(newConn.id);
+
+    // 履歴保存もお忘れなく
+    recordHistory();
 });
 
 // 人物追加ボタン
@@ -1217,7 +1243,7 @@ document.getElementById('btn-add-node').addEventListener('click', () => {
         y: y,
         label: "新規人物",
         style: {
-            width: 90, height: 90, // ★変更：90x90の正方形に！
+            width: 60, height: 60, // ★変更：90x90の正方形に！
             borderColor: '#333333',
             borderWidth: 2,
         },
@@ -1225,7 +1251,7 @@ document.getElementById('btn-add-node').addEventListener('click', () => {
             color: '#333333',
             fontSize: 14,
             fontWeight: 'normal',
-            x: 45, y: 45 // ★変更：真ん中になるように調整（90の半分）
+            x: 30, y: 30 // ★変更：真ん中になるように調整（60の半分）
         }
     };
 
@@ -2711,112 +2737,99 @@ function registerInteraction(element, info) {
     }, { passive: false });
 }
 
+
+// ★書き換え：ドラッグ開始処理の完全版
 function handlePointerDown(e, info) {
     if (e.type === 'touchstart') e.preventDefault();
 
     const pos = getPointerPos(e);
 
-    // 選択処理（ノードの場合）
-    if (info.type === 'node') selectNode(info.id);
-
     // 長押しタイマー
-    longPressTimer = setTimeout(() => {
-        // console.log("⏰ Long Press Detected");
-    }, 500);
+    longPressTimer = setTimeout(() => { }, 500);
 
     isDragging = true;
     currentDragTarget = e.target;
 
-    // --- オフセット計算（ここが修正ポイント！） ---
+    // --- 分岐処理 ---
 
     if (info.type === 'node') {
         // [パターンA] ノード本体のドラッグ
 
-        selectNode(info.id);
+        // まだ選択されていないノードを掴んだ場合
+        if (!selectedNodeIds.has(info.id)) {
+            selectNode(info.id);
+        } else {
+            // すでに選択されているノードを掴んだ場合
+            selectedId = info.id;
+            // ★重要：ここで render() を呼んではいけない！
+            // 呼ぶとDOMがリセットされてドラッグが途切れる原因になるの
+        }
 
-        // ====== メニューが開いていたら、中身をこのノードに切り替える ======
+        // メニュー更新
         const menu = document.getElementById('context-menu');
         if (menu.style.display === 'block') {
             const node = nodes.find(n => n.id === info.id);
             if (node) {
-                // メニューの位置（left/top）は今のままキープ！
                 const currentX = parseInt(menu.style.left) || 0;
                 const currentY = parseInt(menu.style.top) || 0;
-
-                // 切り替え実行！
                 openContextMenu(node, node.type === 'box' ? 'box' : 'node', currentX, currentY);
             }
         }
 
-        dragInfo = info; // そのまま使う
-
-        const currentLeft = parseFloat(currentDragTarget.style.left) || 0;
-        const currentTop = parseFloat(currentDragTarget.style.top) || 0;
-        dragOffset.x = pos.x - currentLeft;
-        dragOffset.y = pos.y - currentTop;
+        dragInfo = info;
+        // ★重要：移動ロジックを統一するため、ここでも「絶対座標」を記録する
+        dragOffset.x = pos.x;
+        dragOffset.y = pos.y;
 
     } else if (info.type === 'node-text') {
         // [パターンB] ノード内の文字ドラッグ
 
-        // もし「選択されていないノード」の文字を掴んだ場合
+        // 複数選択の一部なら、文字移動ではなく「ノード移動（全体）」にする
+        if (selectedNodeIds.has(info.id)) {
+             dragInfo = { ...info, type: 'node' }; // 強制的にノード移動モードへ
+             dragOffset.x = pos.x;
+             dragOffset.y = pos.y;
+             return;
+        }
+        
+        // 未選択ノードの文字を掴んだ場合も、ノード全体移動へ
         if (selectedId !== info.id) {
-            // ★修正：元の info を書き換えず、新しいオブジェクトを作る！
-            // これで「永続的な書き換えバグ」が直るの
             dragInfo = { ...info, type: 'node' };
-
             selectNode(info.id);
-
+            
+            // メニュー更新
             const menu = document.getElementById('context-menu');
             if (menu.style.display === 'block') {
                 const node = nodes.find(n => n.id === info.id);
-                if (node) {
-                    const currentX = parseInt(menu.style.left) || 0;
-                    const currentY = parseInt(menu.style.top) || 0;
-
-                    openContextMenu(node, node.type === 'box' ? 'box' : 'node', currentX, currentY);
-                }
+                if (node) openContextMenu(node, node.type === 'box' ? 'box' : 'node', parseInt(menu.style.left)||0, parseInt(menu.style.top)||0);
             }
 
-            // ノード移動用のオフセット計算（ノード本体の座標基準）
-            const nodeEl = document.getElementById(info.id);
-            dragOffset.x = pos.x - (parseFloat(nodeEl.style.left) || 0);
-            dragOffset.y = pos.y - (parseFloat(nodeEl.style.top) || 0);
+            dragOffset.x = pos.x;
+            dragOffset.y = pos.y;
             return;
         }
 
-        // 選択中の文字ドラッグ（本来の文字移動）
-        dragInfo = info; // そのまま使う
-
-        // 文字移動は「前回からの差分」で計算するため、
-        // 開始時のマウス座標をそのまま記録するの（絶対座標）
+        // 単一選択での文字位置調整モード
+        dragInfo = info; 
         dragOffset.x = pos.x;
         dragOffset.y = pos.y;
 
-        } else if (info.type === 'conn-label') {
-        // ★追加：もし未選択なら、ラベルを掴んだ時点で選択状態にする！
+    } else if (info.type === 'conn-label') {
+        // [パターンC] 線ラベル
         if (selectedConnId !== info.connId) {
             selectNode(null);
             selectConnection(info.connId);
-            
-            // メニューが開いていたら切り替える（既存ロジックと同じ）
-            const menu = document.getElementById('context-menu');
-            if (menu.style.display === 'block') {
-                 const conn = connections.find(c => c.id === info.connId);
-                 if (conn) {
-                     const currentX = parseInt(menu.style.left) || 0;
-                     const currentY = parseInt(menu.style.top) || 0;
-                     openContextMenu(conn, 'connection', currentX, currentY);
-                 }
-            }
         }
-
-        // [パターンC] 線ラベルのドラッグ
         dragInfo = info;
         dragOffset.x = pos.x;
         dragOffset.y = pos.y;
 
     } else {
         // [パターンD] ハンドル・ウェイポイント
+        if (selectedConnId !== info.connId) {
+            selectNode(null);
+            selectConnection(info.connId);
+        }
         dragInfo = info;
         const rect = container.getBoundingClientRect();
         dragOffset.x = rect.left;
@@ -2824,6 +2837,80 @@ function handlePointerDown(e, info) {
     }
 }
 
+// ★新規追加：線の直線部分を押したときの処理
+function handleLineMouseDown(e, conn) {
+    if (e.shiftKey) return; // Shiftキーの機能（もしあれば）を阻害しないように
+    e.stopPropagation(); // 背景クリックなどを防ぐ
+
+    // 1. 未選択なら「選択」するだけ（ドラッグは開始しない）
+    if (selectedConnId !== conn.id) {
+        selectNode(null);
+        selectConnection(conn.id);
+
+        // メニューが開いていれば切り替え
+        const menu = document.getElementById('context-menu');
+        if (menu.style.display === 'block') {
+            const currentX = parseInt(menu.style.left) || 0;
+            const currentY = parseInt(menu.style.top) || 0;
+            openContextMenu(conn, 'connection', currentX, currentY);
+        }
+        return;
+    }
+
+    // 2. 選択済みなら「関節を追加」して「即ドラッグ開始」！
+
+    const pos = getPointerPos(e);
+    const rect = container.getBoundingClientRect();
+    const clickX = pos.x - rect.left;
+    const clickY = pos.y - rect.top;
+
+    // 挿入位置の計算（既存ロジックと同じ）
+    const allPoints = [getPointPosition(conn.start)];
+    conn.waypoints.forEach(wp => allPoints.push(wp));
+    allPoints.push(getPointPosition(conn.end));
+
+    let bestIndex = 0;
+    let minDetour = Infinity;
+
+    for (let i = 0; i < allPoints.length - 1; i++) {
+        const A = allPoints[i];
+        const B = allPoints[i + 1];
+        const distAC = Math.hypot(clickX - A.x, clickY - A.y);
+        const distCB = Math.hypot(B.x - clickX, B.y - clickY);
+        const distAB = Math.hypot(B.x - A.x, B.y - A.y);
+        const detour = (distAC + distCB) - distAB;
+
+        if (detour < minDetour) {
+            minDetour = detour;
+            bestIndex = i;
+        }
+    }
+
+    // 関節を追加
+    conn.waypoints.splice(bestIndex, 0, { x: clickX, y: clickY });
+
+    // 画面更新（これで新しい関節のDOMが生成される）
+    render();
+    if (editingConnId === conn.id) updateConnPreview(conn);
+
+    // ★ここが魔法！今作った関節を強制的にドラッグ状態にする
+    isDragging = true;
+    dragInfo = {
+        type: 'waypoint',
+        connId: conn.id,
+        index: bestIndex
+    };
+
+    // オフセット設定（絶対位置指定なのでコンテナの左上を基準にする）
+    dragOffset.x = rect.left;
+    dragOffset.y = rect.top;
+
+    // ※マウスアップ時に履歴保存されるので、ここでは何もしなくてOK
+}
+
+// （注意：古い function onLineClick(e, conn) {...} は削除してね！）
+
+/*
 function onLineClick(e, conn) {
     if (e.shiftKey) return;
 
@@ -2879,7 +2966,7 @@ function onLineClick(e, conn) {
     conn.waypoints.splice(bestIndex, 0, { x: clickX, y: clickY });
     render();
 }
-
+*/
 
 // ====== グローバルイベント（マウス・タッチ共通） =====
 
@@ -2939,28 +3026,58 @@ function onLineClick(e, conn) {
             return; // ここで終了（下の処理には行かせない）
         }
 
-        // Case 2: それ以外（ノード・ハンドル・ウェイポイント）
+
+
+        // Case 2: それ以外
+        
+        // ★修正：ノード移動（マルチセレクト対応）
+        if (dragInfo.type === 'node') {
+            const dx = pos.x - dragOffset.x;
+            const dy = pos.y - dragOffset.y;
+            
+            dragOffset.x = pos.x;
+            dragOffset.y = pos.y;
+
+            // 1. ノードを動かす
+            selectedNodeIds.forEach(id => {
+                const node = nodes.find(n => n.id === id);
+                if (node) {
+                    node.x += dx;
+                    node.y += dy;
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.style.left = node.x + 'px';
+                        el.style.top = node.y + 'px';
+                    }
+                }
+            });
+            
+            // 2. ★追加：選択されている矢印の「関節」なども一緒に動かす！
+            selectedConnIds.forEach(id => {
+                const conn = connections.find(c => c.id === id);
+                if (conn) {
+                    // 関節(waypoints)を全部ずらす
+                    conn.waypoints.forEach(wp => {
+                        wp.x += dx;
+                        wp.y += dy;
+                    });
+                    
+                    // もし始点・終点がノード接続じゃなく「座標指定(point)」なら、それも動かす
+                    // (独立した矢印を動かすために必要よ！)
+                    if (conn.start.type === 'point') { conn.start.x += dx; conn.start.y += dy; }
+                    if (conn.end.type === 'point') { conn.end.x += dx; conn.end.y += dy; }
+                }
+            });
+
+            render(); 
+            return;
+        }
+
+        // --- ハンドル・ウェイポイントの処理（既存のまま）---
         // 絶対座標（ターゲット位置）を計算
         const targetX = pos.x - dragOffset.x;
         const targetY = pos.y - dragOffset.y;
-
-        if (dragInfo.type === 'node') {
-            // ノード移動
-            const nodeEl = document.getElementById(dragInfo.id);
-            if (nodeEl) {
-                nodeEl.style.left = targetX + 'px';
-                nodeEl.style.top = targetY + 'px';
-            }
-
-            const nodeData = nodes.find(n => n.id === dragInfo.id);
-            if (nodeData) {
-                nodeData.x = targetX;
-                nodeData.y = targetY;
-            }
-            // 線もついてくるように再描画
-            render();
-
-        } else if (dragInfo.type === 'handle') {
+        if (dragInfo.type === 'handle') {
             // ハンドル移動
             const conn = connections.find(c => c.id === dragInfo.connId);
             const snapTarget = findClosestAnchor(targetX, targetY);
@@ -2994,15 +3111,15 @@ function onLineClick(e, conn) {
                 const conn = connections.find(c => c.id === dragInfo.connId);
                 if (conn) {
                     conn.waypoints.splice(dragInfo.index, 1);
-                    
+
                     // 即座に画面更新
                     render();
                     if (editingConnId === conn.id) updateConnPreview(conn);
-                    
+
                     // 履歴保存
                     recordHistory();
                 }
-                
+
                 // ★重要：ドラッグを強制終了させる（これ以上動かすとエラーになるから）
                 isDragging = false;
                 dragInfo = null;
@@ -3137,7 +3254,7 @@ function startResizeNode(e, nodeId, dir) {
 window.addEventListener('mousemove', (e) => {
     // ★ここが目印！これ以外の mousemove は消さないでね
     if (!isNodeResizing || !resizeNodeId) return;
-    
+
     e.preventDefault();
 
     const dx = e.clientX - nodeResizeStartPos.x;
@@ -3176,7 +3293,7 @@ window.addEventListener('mousemove', (e) => {
     if (nodeResizeDir.includes('w')) {
         newX = (startX + startW) - newW;
     }
-    
+
     // 上(n)を動かしている時
     if (nodeResizeDir.includes('n')) {
         newY = (startY + startH) - newH;
@@ -3187,7 +3304,7 @@ window.addEventListener('mousemove', (e) => {
     if (node) {
         node.x = newX;
         node.y = newY;
-        
+
         // DOM要素の位置更新
         const el = document.getElementById(resizeNodeId);
         el.style.left = newX + 'px';
@@ -3550,7 +3667,213 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
+// ★追加：ビューポートを更新する関数
+function updateViewport() {
+    // world-layer 全体を動かす魔法
+    container.style.transform = `translate(${viewport.x}px, ${viewport.y}px)`;
+}
+
+// ★追加：初期位置を「A4ガイドが画面ど真ん中」に来るようにセット
+function initViewport() {
+    const artboardW = 1123;
+    const artboardH = 794;
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    // 画面中央 - アートボード中央
+    viewport.x = (screenW - artboardW) / 2;
+    viewport.y = (screenH - artboardH) / 2;
+
+    updateViewport();
+}
+
+// ====== パン（視点移動）操作の実装 ======
+
+// 背景（canvasContainer）でのマウスダウン
+canvasContainer.addEventListener('mousedown', (e) => {
+    // ツールバーやメニューの上なら何もしない
+    if (e.target.closest('#toolbar') || e.target.closest('#ui-layer') || e.target.closest('#context-menu')) return;
+
+    if (e.button !== 0) return;
+    // 背景、またはSVG背景(線がないところ)、またはガイド枠をクリックした時
+    if (e.target === canvasContainer || e.target === svgLayer || e.target.id === 'artboard-guide' || e.target === container) {
+        isPanning = true;
+        panStart = { x: e.clientX, y: e.clientY };
+
+        // 選択解除
+        selectNode(null);
+        selectConnection(null);
+        closeContextMenu();
+
+        canvasContainer.style.cursor = 'grabbing';
+    }
+});
+
+// マウスムーブ（ウィンドウ全体で監視）
+window.addEventListener('mousemove', (e) => {
+    if (isPanning) {
+        e.preventDefault();
+        const dx = e.clientX - panStart.x;
+        const dy = e.clientY - panStart.y;
+
+        panStart = { x: e.clientX, y: e.clientY };
+
+        viewport.x += dx;
+        viewport.y += dy;
+
+        updateViewport();
+    }
+});
+
+// マウスアップ
+window.addEventListener('mouseup', () => {
+    if (isPanning) {
+        isPanning = false;
+        canvasContainer.style.cursor = 'grab';
+    }
+});
+
+
+// ====== 範囲選択（右ドラッグ）の実装 ======
+
+// 右クリックメニューが出ないようにする（コンテナ上のみ）
+canvasContainer.addEventListener('contextmenu', (e) => {
+    // 何もない場所、またはSVG背景での右クリックならメニューを抑制して範囲選択へ
+    if (e.target === canvasContainer || e.target === svgLayer || e.target === container) {
+        e.preventDefault();
+    }
+});
+
+// 範囲選択の開始（mousedown）
+canvasContainer.addEventListener('mousedown', (e) => {
+    // 右クリック(button 2) かつ、背景をクリックした時
+    if (e.button === 2 && (e.target === canvasContainer || e.target === svgLayer || e.target === container || e.target.id === 'artboard-guide')) {
+        e.stopPropagation();
+
+        isSelecting = true;
+
+        // ★修正：getBoundingClientRect ではなく、viewport変数を使う！
+        // 「マウスの画面座標」から「視点のズレ」を引けば、世界の中での座標になるの
+        selectionStart = {
+            x: e.clientX - viewport.x,
+            y: e.clientY - viewport.y
+        };
+
+        // ボックス要素を作成
+        selectionBoxEl = document.createElement('div');
+        selectionBoxEl.className = 'selection-box';
+        container.appendChild(selectionBoxEl);
+
+        updateSelectionBox(selectionStart.x, selectionStart.y, 0, 0);
+    }
+});
+
+// 範囲選択中の動き（mousemove）
+window.addEventListener('mousemove', (e) => {
+    if (!isSelecting || !selectionBoxEl) return;
+
+    e.preventDefault();
+
+    // ★修正：ここも viewport を基準に計算するわ
+    const currentX = e.clientX - viewport.x;
+    const currentY = e.clientY - viewport.y;
+
+    // 始点と現在地から、左上の座標(x,y)と幅高さ(w,h)を計算
+    const x = Math.min(selectionStart.x, currentX);
+    const y = Math.min(selectionStart.y, currentY);
+    const w = Math.abs(currentX - selectionStart.x);
+    const h = Math.abs(currentY - selectionStart.y);
+
+    updateSelectionBox(x, y, w, h);
+});
+
+// 範囲選択の終了（mouseup）
+window.addEventListener('mouseup', (e) => {
+    if (isSelecting) {
+        // 範囲内のノードを探して選択する判定処理
+        finishSelection();
+
+        // 後片付け
+        isSelecting = false;
+        if (selectionBoxEl) {
+            selectionBoxEl.remove();
+            selectionBoxEl = null;
+        }
+    }
+});
+
+// ボックスの見た目を更新するヘルパー
+function updateSelectionBox(x, y, w, h) {
+    if (selectionBoxEl) {
+        selectionBoxEl.style.left = x + 'px';
+        selectionBoxEl.style.top = y + 'px';
+        selectionBoxEl.style.width = w + 'px';
+        selectionBoxEl.style.height = h + 'px';
+    }
+}
+
+// 選択判定ロジック
+// ★書き換え：選択判定ロジック
+function finishSelection() {
+    if (!selectionBoxEl) return;
+    
+    // ボックスの座標（世界座標）
+    const boxLeft = parseFloat(selectionBoxEl.style.left);
+    const boxTop = parseFloat(selectionBoxEl.style.top);
+    const boxRight = boxLeft + parseFloat(selectionBoxEl.style.width);
+    const boxBottom = boxTop + parseFloat(selectionBoxEl.style.height);
+
+    // 一旦クリア
+    selectNode(null); 
+    selectConnection(null);
+
+    // 1. ノードの判定
+    nodes.forEach(node => {
+        const w = node.style?.width || 120;
+        const h = node.style?.height || 60;
+        const nRight = node.x + w;
+        const nBottom = node.y + h;
+        
+        // ボックスに触れていれば選択
+        if (node.x < boxRight && nRight > boxLeft &&
+            node.y < boxBottom && nBottom > boxTop) {
+            
+            selectedNodeIds.add(node.id);
+            const el = document.getElementById(node.id);
+            if (el) el.classList.add('selected');
+        }
+    });
+
+    // 2. ★追加：矢印の判定（始点・終点・関節のどれかが入っていたら選択！）
+    connections.forEach(conn => {
+        const points = [];
+        points.push(getPointPosition(conn.start)); // 始点
+        points.push(getPointPosition(conn.end));   // 終点
+        conn.waypoints.forEach(wp => points.push(wp)); // 関節
+
+        // どれか1つでもボックスに入っていれば「選択」とみなすわ
+        const isHit = points.some(p => 
+            p.x >= boxLeft && p.x <= boxRight && 
+            p.y >= boxTop && p.y <= boxBottom
+        );
+
+        if (isHit) {
+            selectedConnIds.add(conn.id);
+        }
+    });
+
+    render();
+    
+    // パネル更新用（最後の選択物をセット）
+    if (selectedNodeIds.size > 0) {
+        selectedId = Array.from(selectedNodeIds).pop();
+    } else if (selectedConnIds.size > 0) {
+        selectedConnId = Array.from(selectedConnIds).pop();
+    }
+}
+
 // ====== アプリ起動 ======
+initViewport(); // ★追加：最初に画面位置を合わせる！
 initNodes();
 render();
 recordHistory();

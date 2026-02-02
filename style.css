@@ -34,6 +34,61 @@ html {
     position: relative;
     width: 100%;
     height: 100%;
+    overflow: hidden; /* はみ出し禁止（ビューポート） */
+    cursor: grab;     /* 背景は掴めるアイコンに */
+    /* 背景色はJSで制御されるからここでは指定なしでもOK */
+}
+
+/* 掴んでいる最中 */
+#canvas-container:active {
+    cursor: grabbing;
+}
+
+/* ★追加：無限キャンバスの「世界」 */
+#world-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    /* transform: translate(...) はJSで制御 */
+    transform-origin: 0 0;
+}
+
+/* ★修正：A4ガイド枠（アートボード） */
+#artboard-guide {
+    position: absolute;
+    /* A4横 (297mm x 210mm) @ 96dpi 換算 */
+    width: 1123px; 
+    height: 794px;
+    
+    /* ★変更点：背景を「うっすら半透明」にするわ！ */
+    /* rgba(255, 255, 255, 0.1) = 白色の透明度10% */
+    /* これなら背景色を変えても、その色が綺麗に透けて見えるの */
+    /* background-color: rgba(255, 255, 255, 0.1); */
+    
+    /* ★変更点：範囲がはっきりわかるように、破線の枠をつけるわ */
+    border: 2px dashed rgba(0, 0, 0, 0.2); 
+    
+    /* 影は一旦消してスッキリさせる（枠線があれば十分わかるからね） */
+    box-shadow: none;
+    
+    /* 以下はそのまま */
+    top: 0;
+    left: 0;
+    z-index: 0; 
+    pointer-events: none; 
+}
+
+/* ガイドのラベル（文字の色も少し調整しておいたわ） */
+.artboard-label {
+    position: absolute;
+    top: -25px;
+    left: 0;
+    font-size: 14px;
+    color: #888; /* 背景に馴染む色に */
+    font-weight: bold;
+    opacity: 0.7;
 }
 
 /* ====== SVGレイヤー ====== */
@@ -41,11 +96,18 @@ html {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    /* ★変更：ノード(z-index:10)より手前に表示するわ！ */
+    
+    /* ★修正ポイント：0だとブラウザが描画をサボるから、1pxだけ確保するの！ */
+    /* これで「描画領域」として認識させて、あとはoverflow: visibleではみ出させる作戦よ */
+    width: 1px;
+    height: 1px;
+    
+    /* 1pxからはみ出した矢印も表示する */
+    overflow: visible;
+    
+    /* ノード(z-index:10)より手前に表示 */
     z-index: 12;
-    /* ★重要：これがないと、透明な幕が邪魔してノードが触れなくなっちゃうの */
+    /* 線そのものは触れなくても、中のパス(connection-hit-area)は触れるようにする設定 */
     pointer-events: none;
 }
 
@@ -158,6 +220,8 @@ html {
     transform: translate(-50%, -50%);
     cursor: grab;
     z-index: 200;
+    /* ★追加：透明度の変化をなめらかに */
+    transition: opacity 0.2s, background-color 0.2s, transform 0.2s;
 }
 
 .line-handle:hover {
@@ -182,6 +246,7 @@ html {
     transform: translate(-50%, -50%);
     cursor: grab;
     z-index: 200;
+    transition: opacity 0.2s, transform 0.2s;
 }
 
 /* 擬似要素を使って、透明な「持ち手」を広げる魔法 */
@@ -953,3 +1018,15 @@ input[type=range]::-webkit-slider-thumb {
 .accordion-content .menu-section {
     padding: 0 12px; /* 横の余白だけ確保 */
 }
+
+/* ====== 範囲選択ボックス（ラバーバンド） ====== */
+.selection-box {
+    position: absolute;
+    border: 1px dashed #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+    z-index: 1000; /* 最前面に表示 */
+    pointer-events: none; /* マウスイベントを吸わないように */
+}
+
+/* 複数選択されているノードの強調表示（既存の .selected と同じでOK） */
+/* .node.selected { ... } は既にあるからそのままでOK！ */
