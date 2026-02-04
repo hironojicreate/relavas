@@ -46,14 +46,20 @@ let nodes = [
     {
         id: "node-a", x: 400, y: 200, // ガイド中央へ移動 (+250, +100)
         label: "リラ",
-        style: { width: 60, height: 60, backgroundColor: "#ffffff" },
+        style: {
+            width: 60, height: 60, backgroundColor: "#ffffff",
+            borderRadius: 10
+         },
         text: { x: 30, y: 35 }
     },
     // 2. ヴァス（右下）- 60px正方形
     {
         id: "node-b", x: 650, y: 340, // ガイド中央へ移動
         label: "ヴァス",
-        style: { width: 60, height: 60, backgroundColor: "#ffffff" },
+        style: {
+            width: 60, height: 60, backgroundColor: "#ffffff",
+            borderRadius: 10
+         },
         text: { x: 30, y: 35 }
     },
     // 3. リラヴァス（リラの下・ヴァスの左）- 70px正方形
@@ -64,7 +70,8 @@ let nodes = [
             width: 70, height: 70, // ヒロさんの設定を維持
             backgroundColor: "#e1bee7",
             borderColor: '#333333',
-            borderWidth: 2
+            borderWidth: 2,
+            borderRadius: 10
         },
         text: {
             x: 35, y: 72, // ★微調整：70pxの真ん中は35なので合わせました
@@ -86,7 +93,8 @@ let nodes = [
             borderStyle: 'dashed',
             backgroundColor: '#f0f7ff',
             opacity: 90,
-            boxShadow: 'none'
+            boxShadow: 'none',
+            borderRadius: 10
         },
         text: {
             color: '#333333',
@@ -108,7 +116,8 @@ let nodes = [
             borderColor: 'transparent',
             backgroundColor: '#fff176',
             opacity: 100,
-            boxShadow: '0 3px 5px rgba(0,0,0,0.1)'
+            boxShadow: '0 3px 5px rgba(0,0,0,0.1)',
+            borderRadius: 10
         },
         text: {
             color: '#e65100',
@@ -177,8 +186,12 @@ let selectionStart = { x: 0, y: 0 }; // 範囲選択の開始位置
 let selectionBoxEl = null;       // 範囲選択の見た目要素
 let selectedConnIds = new Set(); // ★追加：複数の矢印IDを管理する変数
 
+// ★追加：複数選択リサイズ用の変数
+let resizeGroupInitialState = new Map(); // 初期状態を保存する地図
+let resizeAnchorPoint = { x: 0, y: 0 };  // 拡大縮小の基準点（宇宙の中心！）
 
-
+// ★さらに追加：矢印のリサイズ用
+let resizeConnInitialState = new Map();
 
 
 // ====== 初期化処理（ノード生成） ======
@@ -212,17 +225,28 @@ function createNodeElement(nodeData) {
     el.style.width = w + 'px';
     el.style.height = h + 'px';
 
-    // ★修正1：枠線（ここはそのまま）
+    // 枠線（ここはそのまま）
     el.style.borderColor = nodeData.style?.borderColor || '#333333';
     el.style.borderWidth = (nodeData.style?.borderWidth !== undefined ? nodeData.style.borderWidth : 2) + 'px';
     el.style.borderStyle = nodeData.style?.borderStyle || 'solid';
 
-    // ★修正2：塗りの透過 (RGBA変換)
+    // 塗りの透過 (RGBA変換)
     // 以前の el.style.opacity = ... は廃止！
     const bgCol = nodeData.style?.backgroundColor || '#ffffff';
     const op = nodeData.style?.opacity !== undefined ? nodeData.style.opacity : 100;
     // ヘルパー関数を使って「半透明の色」を作ってセットするの
     el.style.backgroundColor = hexToRgba(bgCol, op);
+
+    // 1. 幅と高さを取得（style属性からだとまだ設定前かもしれないのでデータから取る）
+    const wVal = nodeData.style?.width || 120;
+    const hVal = nodeData.style?.height || 60;
+    
+    // 2. 角丸の計算 (初期値10)
+    const rPercent = nodeData.style?.borderRadius !== undefined ? nodeData.style.borderRadius : 10;
+    const maxRadius = Math.min(wVal, hVal) / 2;
+    const rPx = (rPercent / 100) * maxRadius;
+    
+    el.style.borderRadius = rPx + 'px';
 
     // 影
     const boxShd = nodeData.style?.boxShadow || 'none';
@@ -829,16 +853,30 @@ function drawConnection(conn, updatedIds) {
     // 矢印サイズ計算
     const arrowBaseSize = 12 + (w * 1.5);
     const arrowLen = arrowBaseSize * 1.3;
-    const gapSize = arrowLen + 4;
+    const gapSize = arrowLen + 6;
+    const marginSize = 6;
 
-    // 矢印がある場合、線を少し短くする（矢印のスペース確保）
+// 始点（start）側の調整
+    // 次の点（経由点があればそれ、なければ終点）に向かって隙間を空ける
+    const nextPoint = (conn.waypoints.length > 0) ? conn.waypoints[0] : endPos;
+    
     if (style.arrow === 'start' || style.arrow === 'both') {
-        const nextPoint = (conn.waypoints.length > 0) ? conn.waypoints[0] : endPos;
+        // 矢印があるなら、矢印分＋ゆとりを空ける
         startPos = movePointTowards(startPos, nextPoint, gapSize);
+    } else {
+        // ★ここが新機能！矢印がなくても、少しだけ（marginSize分）離す！
+        startPos = movePointTowards(startPos, nextPoint, marginSize);
     }
+
+    // 終点（end）側の調整
+    // 前の点（経由点があればそれ、なければ始点）に向かって隙間を空ける
+    const prevPoint = (conn.waypoints.length > 0) ? conn.waypoints[conn.waypoints.length - 1] : startPos;
+    
     if (style.arrow === 'end' || style.arrow === 'both') {
-        const prevPoint = (conn.waypoints.length > 0) ? conn.waypoints[conn.waypoints.length - 1] : startPos;
         endPos = movePointTowards(endPos, prevPoint, gapSize);
+    } else {
+        // ★ここも新機能！矢印がなくても離す！
+        endPos = movePointTowards(endPos, prevPoint, marginSize);
     }
 
     // 2. パスデータ
@@ -974,19 +1012,56 @@ function drawConnection(conn, updatedIds) {
     svgLayer.appendChild(visualPath);
 
 
-    // 6. ラベル（文字）の描画
+    // 6. ラベル（文字）の描画（縦書き改行 修正版）
     if (conn.label && conn.label.text) {
         const l = conn.label;
         const cx = (startPos.x + endPos.x) / 2 + (l.offsetX || 0);
         const cy = (startPos.y + endPos.y) / 2 + (l.offsetY || 0);
 
-        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.textContent = l.text;
+        const lines = l.text.split('\n');
+        const fSize = l.fontSize || 12;
+        const lineHeight = 1.2; 
 
-        // 文字位置の微調整
+        // --- 背景（矩形）のサイズ計算 ---
+        const maxLineLen = Math.max(...lines.map(line => line.length));
+        
+        let wRect, hRect;
+        if (l.isVertical) {
+            // 縦書き：幅＝行数、高さ＝最長行
+            wRect = lines.length * (fSize * lineHeight) + 10;
+            hRect = maxLineLen * fSize + 10;
+        } else {
+            // 横書き：幅＝最長行、高さ＝行数
+            wRect = maxLineLen * fSize + 10;
+            hRect = lines.length * (fSize * lineHeight) + 10;
+        }
+
+        // 背景描画
+        if (l.bgColor && l.bgColor !== 'transparent') {
+            const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            bg.setAttribute("x", cx - wRect / 2);
+            bg.setAttribute("y", cy - hRect / 2);
+            bg.setAttribute("width", wRect);
+            bg.setAttribute("height", hRect);
+            bg.setAttribute("fill", l.bgColor);
+            bg.setAttribute("rx", 4);
+            
+            bg.style.pointerEvents = 'all';
+            bg.style.cursor = (conn.id === selectedConnId) ? "move" : "pointer";
+            registerInteraction(bg, { type: 'conn-label', connId: conn.id });
+            bg.addEventListener('contextmenu', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                selectConnection(conn.id);
+                openContextMenu(conn, 'connection', e.clientX, e.clientY);
+            });
+            svgLayer.appendChild(bg);
+        }
+
+        // 文字描画
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        
         let adjX = 0;
         let adjY = 0;
-
         if (l.isVertical) {
             text.setAttribute("class", "vertical-text");
             adjX = -1;
@@ -996,51 +1071,65 @@ function drawConnection(conn, updatedIds) {
             adjY = 1;
         }
 
+        // text要素自体には座標をセットせず、tspanで制御するスタイルに変更してもいいけど、
+        // 基準点としてセットしておくわ
         text.setAttribute("x", cx + adjX);
         text.setAttribute("y", cy + adjY);
 
         text.setAttribute("fill", l.color || '#333');
-        text.setAttribute("font-size", l.fontSize || 12);
+        text.setAttribute("font-size", fSize);
         text.setAttribute("font-weight", l.fontWeight || 'normal');
         text.setAttribute("text-anchor", "middle");
         text.setAttribute("dominant-baseline", "central");
-
+        
         text.style.pointerEvents = "all";
         text.style.cursor = (conn.id === selectedConnId) ? "move" : "pointer";
-        registerInteraction(text, { type: 'conn-label', connId: conn.id });
 
+        // ★修正ポイント：縦書き・横書きで行送りの計算を変える！
+        lines.forEach((lineStr, index) => {
+            const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+            tspan.textContent = lineStr;
+
+            if (l.isVertical) {
+                // === 縦書き (vertical-rl) の場合 ===
+                // 行を変える ＝ 「左（X軸マイナス方向）」へずらすこと
+                // index 0（1行目）が一番右に来るように計算するわ
+
+                // 中心からのオフセット量（行数に基づいて計算）
+                // 例: 2行なら、0行目は +0.5幅、1行目は -0.5幅 の位置
+                const lineOffset = (lines.length - 1) / 2 - index; 
+                
+                // 行間を含めた移動量
+                const xPos = cx + adjX + (lineOffset * (fSize * lineHeight));
+                
+                tspan.setAttribute("x", xPos);
+                tspan.setAttribute("y", cy + adjY); // Yは中心固定（文字数で勝手に伸びる）
+
+            } else {
+                // === 横書きの場合 ===
+                // 行を変える ＝ 「下（Y軸プラス方向）」へずらすこと (dyを使用)
+                
+                tspan.setAttribute("x", cx + adjX); // Xは中心固定
+
+                if (index === 0) {
+                    // 全体を垂直方向に中央寄せするための初期ズレ
+                    const startDy = -((lines.length - 1) * lineHeight) / 2;
+                    tspan.setAttribute("dy", startDy + "em");
+                } else {
+                    // 2行目以降は下へ
+                    tspan.setAttribute("dy", lineHeight + "em");
+                }
+            }
+
+            text.appendChild(tspan);
+        });
+
+        registerInteraction(text, { type: 'conn-label', connId: conn.id });
         text.addEventListener('contextmenu', (e) => {
             e.preventDefault(); e.stopPropagation();
             selectConnection(conn.id);
             openContextMenu(conn, 'connection', e.clientX, e.clientY);
         });
-
-        if (l.bgColor && l.bgColor !== 'transparent') {
-            const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-            const fSize = l.fontSize || 12;
-            let wRect, hRect;
-            if (l.isVertical) { wRect = fSize + 10; hRect = l.text.length * fSize + 10; }
-            else { wRect = l.text.length * fSize + 10; hRect = fSize + 10; }
-
-            bg.setAttribute("x", cx - wRect / 2);
-            bg.setAttribute("y", cy - hRect / 2);
-            bg.setAttribute("width", wRect);
-            bg.setAttribute("height", hRect);
-            bg.setAttribute("fill", l.bgColor);
-            bg.setAttribute("rx", 4);
-
-            bg.style.pointerEvents = 'all';
-            bg.style.cursor = (conn.id === selectedConnId) ? "move" : "pointer";
-            registerInteraction(bg, { type: 'conn-label', connId: conn.id });
-
-            bg.addEventListener('contextmenu', (e) => {
-                e.preventDefault(); e.stopPropagation();
-                selectConnection(conn.id);
-                openContextMenu(conn, 'connection', e.clientX, e.clientY);
-            });
-
-            svgLayer.appendChild(bg);
-        }
         svgLayer.appendChild(text);
     }
 
@@ -1285,11 +1374,11 @@ document.getElementById('btn-add-box').addEventListener('click', () => {
             borderWidth: 2,
             
             // ★変更点：ここを「破線」「少し半透明」にするの！
-            borderStyle: 'dashed', 
+            borderStyle: 'solid', 
             backgroundColor: '#ffffff',
-            opacity: 90, // 90%くらいがオシャレ！
-            
-            boxShadow: 'none'
+            opacity: 100, 
+            boxShadow: 'none',
+            borderRadius: 10
         },
         text: {
             color: '#333333',
@@ -1500,6 +1589,14 @@ function openContextMenu(targetData, type, mouseX, mouseY) {
         document.getElementById('input-width').value = s.width || 120;
         document.getElementById('input-height').value = s.height || 60;
         updatePaletteActiveState('palette-bg', s.backgroundColor || '#ffffff');
+        // 角丸スライダーの初期値セット
+        const radius = s.borderRadius !== undefined ? s.borderRadius : 10;
+        const inputRadius = document.getElementById('input-radius');
+        const valRadius = document.getElementById('val-radius');
+        if (inputRadius) {
+            inputRadius.value = radius;
+            valRadius.textContent = radius + '%';
+        }
 
         // 透過率
         const op = s.opacity !== undefined ? s.opacity : 100;
@@ -1538,6 +1635,12 @@ function openContextMenu(targetData, type, mouseX, mouseY) {
         // --- 矢印モード ---
         panelConn.style.display = 'block';
         previewConn.style.display = 'flex';
+
+        document.querySelectorAll('#conn-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('#conn-tabs .tab-btn[data-target="tab-conn-style"]').classList.add('active');
+        
+        document.querySelectorAll('#panel-conn .tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById('tab-conn-style').classList.add('active');
 
         // (矢印のデータセット処理は既存のまま)
         const s = targetData.style || {};
@@ -1832,30 +1935,33 @@ let previewConnScale = 1; // 縮小率
 
 // プレビューのSVG内でマウスダウンした時
 
+
 // プレビューのSVG内でマウスダウンした時
 document.getElementById('preview-conn-svg').addEventListener('mousedown', (e) => {
     e.stopPropagation();
 
-    // ★修正1：クリックしたのが「文字」か「文字背景」じゃなければ無視する！
-    // IDで判定するのが一番確実よ
-    const targetId = e.target.id;
-    const isLabel = (targetId === 'preview-conn-label');
-    const isBg = (targetId === 'preview-conn-label-bg');
+    // ★修正：IDでの完全一致判定はやめるの！
+    // const targetId = e.target.id;
+    // const isLabel = (targetId === 'preview-conn-label');
 
-    if (!isLabel && !isBg) return; // 文字以外なら何もしない（リターン）
+    // ★変更後：クリックした要素自身、またはその親元を辿ってラベルを探す！
+    // これなら <tspan> をクリックしても、親の <text> を見つけてくれるわ。
+    const isLabel = e.target.closest('#preview-conn-label');
+    
+    // 背景矩形はIDで判定しても大丈夫（中に要素がないから）
+    const isBg = (e.target.id === 'preview-conn-label-bg');
+
+    if (!isLabel && !isBg) return; // 文字でも背景でもなければ何もしない
 
     if (!editingConnId) return;
 
-    // ★修正2：ドラッグ直前にスケールを再計算する（これで「飛び」を防ぐ！）
     const svg = document.getElementById('preview-conn-svg');
     const rect = svg.getBoundingClientRect();
     const viewBox = svg.viewBox.baseVal;
 
-    // viewBoxが設定されていれば、現在の表示サイズとの比率を計算
     if (viewBox && viewBox.width > 0 && viewBox.height > 0) {
         const scaleX = rect.width / viewBox.width;
         const scaleY = rect.height / viewBox.height;
-        // updateConnPreviewと同じ「小さい方に合わせる」ロジックで更新
         previewConnScale = Math.min(scaleX, scaleY);
     }
 
@@ -1972,16 +2078,6 @@ function updateConnPreview(conn) {
         markerStart.querySelector('path').setAttribute('fill', arrowColor);
     }
 
-    /*
-        // ■ 計算ロジックをメインキャンバス(drawConnection)から移植！
-        const arrowBaseSize = 12 + (w * 1.5);
-        const arrowLen = arrowBaseSize * 1.3;
-        
-        // マーカー要素を取得
-        const markerEnd = document.getElementById('preview-marker-end');
-        const markerStart = document.getElementById('preview-marker-start');
-        const arrowColor = s.color || '#555';
-    */
     // ■ 終点マーカー（End）の更新
     if (markerEnd) {
         // 色
@@ -2073,11 +2169,21 @@ function updateConnPreview(conn) {
         previewConnScale = Math.min(scaleX, scaleY);
     }
 
+ 
     // 4. ラベル表示
     const cx = (startPos.x + endPos.x) / 2 + (l.offsetX || 0);
     const cy = (startPos.y + endPos.y) / 2 + (l.offsetY || 0);
 
-    label.textContent = l.text || 'Sample';
+    // ★修正：テキストを単純代入せずに、改行処理を行う
+    // label.textContent = l.text || 'Sample';  <-- これは削除
+
+    const textContent = l.text || 'Sample';
+    const lines = textContent.split('\n');
+    const fSize = l.fontSize || 12;
+    const lineHeight = 1.2;
+
+    // 一旦中身を空にする
+    label.innerHTML = '';
 
     // ★修正ポイント：プレビューでも同じ微調整を適用
     let adjX = 0;
@@ -2093,30 +2199,66 @@ function updateConnPreview(conn) {
         adjY = 1;
     }
 
+    // label自体の座標設定（基準点）
     label.setAttribute("x", cx + adjX);
     label.setAttribute("y", cy + adjY);
 
     label.setAttribute("fill", l.color || '#333');
-    label.setAttribute("font-size", l.fontSize || 12);
+    label.setAttribute("font-size", fSize);
     label.setAttribute("font-weight", l.fontWeight || 'normal');
-
-    // ★変更：ここも central に変更
     label.setAttribute("dominant-baseline", "central");
     label.setAttribute("text-anchor", "middle");
 
-    // 背景（矩形）
+    // ★メイン画面と同じロジックで行ごとのtspanを生成
+    lines.forEach((lineStr, index) => {
+        const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+        tspan.textContent = lineStr;
+
+        if (l.isVertical) {
+            // === 縦書きの場合 ===
+            // 中心からのオフセット量で行を左右にずらす
+            const lineOffset = (lines.length - 1) / 2 - index;
+            const xPos = cx + adjX + (lineOffset * (fSize * lineHeight));
+            
+            tspan.setAttribute("x", xPos);
+            tspan.setAttribute("y", cy + adjY); 
+
+        } else {
+            // === 横書きの場合 ===
+            tspan.setAttribute("x", cx + adjX); // Xは中心固定
+
+            if (index === 0) {
+                // 全体を垂直方向に中央寄せするための初期ズレ
+                const startDy = -((lines.length - 1) * lineHeight) / 2;
+                tspan.setAttribute("dy", startDy + "em");
+            } else {
+                // 2行目以降は下へ
+                tspan.setAttribute("dy", lineHeight + "em");
+            }
+        }
+        
+        label.appendChild(tspan);
+    });
+
+    // 背景（矩形）のサイズ計算と描画
     if (l.bgColor && l.bgColor !== 'transparent') {
         bg.style.display = 'block';
         bg.setAttribute("fill", l.bgColor);
-        const fSize = l.fontSize || 12;
+        
+        // ★修正：背景サイズも行数を考慮して計算
+        const maxLineLen = Math.max(...lines.map(line => line.length));
         let bw, bh;
+
         if (l.isVertical) {
-            bw = fSize + 10;
-            bh = (l.text ? l.text.length : 0) * fSize + 10;
+            // 縦書き：幅＝行数、高さ＝最長行
+            bw = lines.length * (fSize * lineHeight) + 10;
+            bh = maxLineLen * fSize + 10;
         } else {
-            bw = (l.text ? l.text.length : 0) * fSize + 10;
-            bh = fSize + 10;
+            // 横書き：幅＝最長行、高さ＝行数
+            bw = maxLineLen * fSize + 10;
+            bh = lines.length * (fSize * lineHeight) + 10;
         }
+
         bg.setAttribute("x", cx - bw / 2);
         bg.setAttribute("y", cy - bh / 2);
         bg.setAttribute("width", bw);
@@ -2126,6 +2268,7 @@ function updateConnPreview(conn) {
     } else {
         bg.style.display = 'none';
     }
+    
     label.style.pointerEvents = 'auto';
     label.style.cursor = 'move';
 }
@@ -2168,16 +2311,43 @@ function refreshNodeStyle(node) {
     const previewText = document.getElementById('preview-text');
     const isEditing = (editingNodeId === node.id);
 
+
     // 1. サイズ
     const w = node.style?.width || 120;
     const h = node.style?.height || 60;
     el.style.width = w + 'px';
     el.style.height = h + 'px';
 
-    // 2. 枠線
+    // 2. 枠線 & 角丸（ここを整理！）
     el.style.borderColor = nodeDataStyle('borderColor', '#333333');
-    el.style.borderWidth = (nodeDataStyle('borderWidth', 2)) + 'px';
+    
+    // ★枠線の太さを先に取得
+    const borderWidth = nodeDataStyle('borderWidth', 2);
+    el.style.borderWidth = borderWidth + 'px';
     el.style.borderStyle = nodeDataStyle('borderStyle', 'solid');
+
+    // === 角丸の計算（重複を消してこれ1つにする！） ===
+    
+    // 角丸の強さ (0〜100) を取得
+    const rPercent = nodeDataStyle('borderRadius', 10);
+    
+    // 短い方の辺の半分を「最大半径」とする
+    const maxRadius = Math.min(w, h) / 2;
+    
+    // パーセントをピクセルに変換（外側の半径）
+    const rPx = (rPercent / 100) * maxRadius;
+    
+    // 本体の角丸（外側）
+    el.style.borderRadius = rPx + 'px';
+
+    // 画像レイヤーの角丸（内側の計算：隙間埋め）
+    if (imgLayer) {
+        // 本体の半径から枠線の太さを引く！
+        const innerRadius = Math.max(0, rPx - borderWidth);
+        
+        imgLayer.style.borderRadius = innerRadius + 'px';
+        imgLayer.style.overflow = 'hidden'; 
+    }
 
     // 3. ★修正：塗りと透過（ここが変わった！）
     const bgCol = nodeDataStyle('backgroundColor', '#ffffff');
@@ -2230,36 +2400,87 @@ function refreshNodeStyle(node) {
 
 
     // --- プレビュー反映 (ここも透過ロジックを合わせる) ---
+// --- プレビュー反映 ---
     if (isEditing) {
-        // ... (サイズ縮小ロジックは既存と同じ) ...
+        // ... (サイズ計算ロジックはそのまま) ...
         const MAX_W = 260; const MAX_H = 160;
         let scale = 1;
         if (w > MAX_W || h > MAX_H) scale = Math.min(MAX_W / w, MAX_H / h);
+        
         previewBox.style.transform = `scale(${scale})`;
-        previewBox.style.width = w + 'px'; previewBox.style.height = h + 'px';
-        const deltaW = w - (w * scale); const deltaH = h - (h * scale);
-        previewBox.style.marginLeft = `-${deltaW / 2}px`; previewBox.style.marginRight = `-${deltaW / 2}px`;
-        previewBox.style.marginTop = `-${deltaH / 2}px`; previewBox.style.marginBottom = `-${deltaH / 2}px`;
+        previewBox.style.width = w + 'px'; 
+        previewBox.style.height = h + 'px';
+        
+        const deltaW = w - (w * scale); 
+        const deltaH = h - (h * scale);
+        previewBox.style.marginLeft = `-${deltaW / 2}px`; 
+        previewBox.style.marginRight = `-${deltaW / 2}px`;
+        previewBox.style.marginTop = `-${deltaH / 2}px`; 
+        previewBox.style.marginBottom = `-${deltaH / 2}px`;
 
         previewBox.style.borderColor = el.style.borderColor;
         previewBox.style.borderWidth = el.style.borderWidth;
         previewBox.style.borderStyle = el.style.borderStyle;
+        previewBox.style.borderRadius = el.style.borderRadius;
         
-        // ★プレビューもRGBA背景色にする
+        // 背景色は本体にセット
         previewBox.style.backgroundColor = hexToRgba(bgCol, op);
-        previewBox.style.backgroundImage = bgImg; // プレビューは簡易的に直接貼る
-        // プレビューの画像透過は… background-blend-mode とか使わないと難しいから
-        // ここでは「画像があるときは画像優先」で見せるか、簡易的にopacity使うか。
-        // ヒロさんの要望通りにするなら、プレビュー用のimgLayerも作るべきだけど、
-        // 複雑になりすぎるから、一旦プレビューは「画像不透明」で表示するね。
-        
         previewBox.style.boxShadow = boxCss;
+
+        // ★★★ ここが追加魔法！プレビュー用画像レイヤーの生成と制御 ★★★
         
-        // テキスト
-        previewText.style.color = label.style.color;
+        // 1. レイヤーがあるか探して、なければ作る
+        let previewImgLayer = previewBox.querySelector('.preview-bg-image');
+        if (!previewImgLayer) {
+            previewImgLayer = document.createElement('div');
+            previewImgLayer.className = 'preview-bg-image';
+            
+            // スタイル設定（CSSに書かずにここで完結させるわ）
+            previewImgLayer.style.position = 'absolute';
+            previewImgLayer.style.top = '0';
+            previewImgLayer.style.left = '0';
+            previewImgLayer.style.width = '100%';
+            previewImgLayer.style.height = '100%';
+            previewImgLayer.style.borderRadius = 'inherit'; // 親の角丸を引き継ぐ
+            previewImgLayer.style.backgroundSize = 'cover';
+            previewImgLayer.style.backgroundPosition = 'center';
+            previewImgLayer.style.backgroundRepeat = 'no-repeat';
+            previewImgLayer.style.zIndex = '0'; // 文字より後ろ！
+            previewImgLayer.style.pointerEvents = 'none';
+            
+            // プレビューボックスの一番最初に追加（文字の下に敷くため）
+            previewBox.insertBefore(previewImgLayer, previewBox.firstChild);
+        }
+
+        // 2. 画像と透明度をセット！
+        previewImgLayer.style.backgroundImage = bgImg;
+        previewImgLayer.style.opacity = imgOp / 100;
+
+        const innerRadiusPreview = Math.max(0, parseFloat(el.style.borderRadius) - parseFloat(el.style.borderWidth));
+        previewImgLayer.style.borderRadius = innerRadiusPreview + 'px';
+
+        // 3. 親の背景画像は消しておく（二重表示防止）
+        previewBox.style.backgroundImage = 'none';
+
+        // ★★★ ここまで ★★★
+
+        
+        // === テキストスタイルの同期（前回のコード） ===
         previewText.textContent = node.label;
-        // ... (他テキストスタイル同期) ...
-        previewText.style.left = tx + 'px'; previewText.style.top = ty + 'px';
+        
+        previewText.style.zIndex = '1'; // 画像より手前に来るように念押し
+        previewText.style.color = label.style.color;
+        previewText.style.fontSize = label.style.fontSize;
+        previewText.style.fontWeight = label.style.fontWeight;
+        previewText.style.textAlign = label.style.textAlign;
+        previewText.style.textShadow = label.style.textShadow;
+        
+        previewText.style.backgroundColor = label.style.backgroundColor;
+        previewText.style.padding = label.style.padding;
+        previewText.style.borderRadius = label.style.borderRadius;
+
+        previewText.style.left = tx + 'px'; 
+        previewText.style.top = ty + 'px';
         
         // ハンドル逆スケール
         previewBox.querySelectorAll('.resize-handle').forEach(hd => hd.style.transform = `scale(${1 / scale})`);
@@ -2364,6 +2585,16 @@ document.getElementById('input-label').addEventListener('input', (e) => {
     });
 });
 
+// 角の丸み (input-radius)
+const inputRadius = document.getElementById('input-radius');
+if (inputRadius) {
+    inputRadius.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value);
+        document.getElementById('val-radius').textContent = val + '%';
+        // データに保存
+        updateNodeProperty('style', 'borderRadius', val);
+    });
+}
 
 // 削除ボタン（コンテキストメニュー用：道連れなし・救出対応版）
 document.getElementById('btn-menu-delete').addEventListener('click', () => {
@@ -2429,51 +2660,258 @@ function startResizePreview(e, direction) {
         h: parseInt(document.getElementById('input-height').value) || 60
     };
 }
+// ====== script.js (追加コード) ======
 
-// リサイズ中の動き（windowのmousemoveに追加）
-// ※さっきのメニュー移動のmousemoveとは別に書いてもいいし、まとめてもいいけど、
-//  わかりやすく追記する形にするわね。
+// ★プレビューのリサイズ処理（復活！）
 
 window.addEventListener('mousemove', (e) => {
-    if (!isResizingPreview || !editingNodeId) return;
+    // プレビューのリサイズ中じゃなければ何もしない
+    if (!isResizingPreview) return;
+    
+    e.preventDefault();
 
-    e.preventDefault(); // テキスト選択などを防ぐ
-
+    // 1. 移動量を計算
     const dx = e.clientX - resizeStartPos.x;
     const dy = e.clientY - resizeStartPos.y;
 
-    let newW = resizeStartSize.w;
-    let newH = resizeStartSize.h;
+    // 2. 元のサイズを取得
+    const startW = resizeStartSize.w;
+    const startH = resizeStartSize.h;
 
-    // 方向によって計算を変える
-    // 右下(se)なら、マウスが右・下に行くほど大きくなる（+dx, +dy）
-    // 左上(nw)なら、マウスが左・上に行くほど大きくなる（-dx, -dy）
+    let newW = startW;
+    let newH = startH;
 
-    if (resizeDirection.includes('e')) newW += dx; // East (右)
-    if (resizeDirection.includes('w')) newW -= dx; // West (左)
-    if (resizeDirection.includes('s')) newH += dy; // South (下)
-    if (resizeDirection.includes('n')) newH -= dy; // North (上)
+    // 3. 方向（nw, ne, sw, se）に合わせてサイズ計算
+    // ※プレビューは中央寄せで表示されているから、どのハンドルでも
+    //  「右に引けば幅が増える」「下に引けば高さが増える」という単純計算で違和感ないはずなの。
+    //  （厳密には左ハンドルだと逆だけど、プレビュー操作なら直感的な「見た目の変化」重視でOK！）
+    
+    if (resizeDirection.includes('e')) newW = startW + dx;
+    if (resizeDirection.includes('w')) newW = startW - dx;
+    if (resizeDirection.includes('s')) newH = startH + dy;
+    if (resizeDirection.includes('n')) newH = startH - dy;
+    
+    // 4. 反転対策：左(w)や上(n)ハンドルの場合は、マウスの動きと逆方向にサイズを変える
+    //    （右に動かしたら、左側が縮む＝幅が減る、という計算）
+    //    → startResizePreviewで取得した resizeDirection を使うよ
+    
+    // 上の単純計算を少し修正：
+    // 右(e)ハンドル: 右へ(+dx)行くと幅増える。OK
+    // 左(w)ハンドル: 右へ(+dx)行くと幅減る。なので -dx にする。
+    // 下(s)ハンドル: 下へ(+dy)行くと高さ増える。OK
+    // 上(n)ハンドル: 下へ(+dy)行くと高さ減る。なので -dy にする。
 
-    // 最小サイズ制限（小さくなりすぎ防止）
+    // リセットして計算し直し
+    newW = startW;
+    newH = startH;
+
+    if (resizeDirection.includes('e')) newW += dx;
+    else if (resizeDirection.includes('w')) newW -= dx;
+
+    if (resizeDirection.includes('s')) newH += dy;
+    else if (resizeDirection.includes('n')) newH -= dy;
+
+    // 5. 最小サイズ制限
     newW = Math.max(30, newW);
     newH = Math.max(30, newH);
 
-    // Shiftキーが押されていたら正方形にする！
+    // 5.5 Shiftキーで正方形維持
     if (e.shiftKey) {
         const size = Math.max(newW, newH);
         newW = size;
         newH = size;
     }
 
-    // 値を更新する関数を呼ぶ（これで全部連動する！）
-    updateNodeSizeFromPreview(newW, newH);
+    // 6. 適用！
+    // 便利な関数 updateNodeSizeFromPreview がすでにあるから、これを呼ぶだけでOK！
+    updateNodeSizeFromPreview(Math.round(newW), Math.round(newH));
 });
 
 window.addEventListener('mouseup', () => {
+    // リサイズ終了処理
     if (isResizingPreview) {
-        recordHistory();
+        isResizingPreview = false;
+        recordHistory(); // 変更を確定して履歴に保存
     }
-    isResizingPreview = false;
+});
+
+// リサイズ中の動き（windowのmousemoveに追加）
+// ※さっきのメニュー移動のmousemoveとは別に書いてもいいし、まとめてもいいけど、
+//  わかりやすく追記する形にするわね。
+
+// script.js - リサイズ用の mousemove リスナー（全盛り対応版）
+window.addEventListener('mousemove', (e) => {
+    if (!isNodeResizing || !resizeNodeId) return;
+
+    e.preventDefault();
+
+    const dx = e.clientX - nodeResizeStartPos.x;
+    const dy = e.clientY - nodeResizeStartPos.y;
+
+    // === A. 複数選択（グループリサイズ） ===
+    if (resizeGroupInitialState.size > 0) {
+        // 1. リーダーの計算 & 倍率決定
+        let startW = nodeResizeStartSize.w;
+        let startH = nodeResizeStartSize.h;
+        let newLeaderW = startW;
+        let newLeaderH = startH;
+
+        if (nodeResizeDir.includes('e')) newLeaderW += dx;
+        if (nodeResizeDir.includes('w')) newLeaderW -= dx;
+        if (nodeResizeDir.includes('s')) newLeaderH += dy;
+        if (nodeResizeDir.includes('n')) newLeaderH -= dy;
+
+        newLeaderW = Math.max(30, newLeaderW);
+        newLeaderH = Math.max(30, newLeaderH);
+
+        let scaleX = newLeaderW / startW;
+        let scaleY = newLeaderH / startH;
+
+        // アスペクト比維持判定（変化が大きい方）
+        let finalScale = 1.0;
+        if (Math.abs(scaleX - 1.0) > Math.abs(scaleY - 1.0)) {
+            finalScale = scaleX;
+        } else {
+            finalScale = scaleY;
+        }
+
+        // 2. ノード・文字の更新
+        resizeGroupInitialState.forEach((initial, id) => {
+            const node = nodes.find(n => n.id === id);
+            if (!node) return;
+
+            // サイズ
+            let targetW = initial.w * finalScale;
+            let targetH = initial.h * finalScale;
+            targetW = Math.max(10, targetW);
+            targetH = Math.max(10, targetH);
+
+            // 座標（World Expand Logic）
+            let targetX = resizeAnchorPoint.x + (initial.x - resizeAnchorPoint.x) * finalScale;
+            let targetY = resizeAnchorPoint.y + (initial.y - resizeAnchorPoint.y) * finalScale;
+
+            // ★追加：文字位置（相対座標なので単純倍）
+            let targetTextX = initial.textX * finalScale;
+            let targetTextY = initial.textY * finalScale;
+            // ★追加：フォントサイズ
+            let targetFontSize = initial.fontSize * finalScale;
+            targetFontSize = Math.max(4, targetFontSize); // 最小4pxくらいで止める
+
+            // データ適用
+            node.x = targetX;
+            node.y = targetY;
+            if (!node.style) node.style = {};
+            node.style.width = targetW;
+            node.style.height = targetH;
+            
+            if (!node.text) node.text = {};
+            node.text.x = targetTextX;
+            node.text.y = targetTextY;
+            node.text.fontSize = targetFontSize;
+
+            // DOM更新
+            refreshNodeStyle(node); // これで一括更新！
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.left = targetX + 'px';
+                el.style.top = targetY + 'px';
+            }
+
+            // リーダー同期
+            if (id === resizeNodeId) {
+                updatePreview(node);
+                const inputW = document.getElementById('input-width');
+                const inputH = document.getElementById('input-height');
+                // 文字サイズ入力欄も同期
+                const inputFS = document.getElementById('input-font-size');
+                
+                if (inputW && inputH) {
+                    inputW.value = Math.round(targetW);
+                    inputH.value = Math.round(targetH);
+                }
+                if (inputFS) {
+                    inputFS.value = Math.round(targetFontSize);
+                }
+            }
+        });
+
+        // 3. ★追加：矢印（Waypoints）の更新
+        resizeConnInitialState.forEach((initial, id) => {
+            const conn = connections.find(c => c.id === id);
+            if (!conn) return;
+
+            // ウェイポイント（関節）の移動
+            conn.waypoints.forEach((wp, index) => {
+                const initWp = initial.waypoints[index];
+                if (initWp) {
+                    wp.x = resizeAnchorPoint.x + (initWp.x - resizeAnchorPoint.x) * finalScale;
+                    wp.y = resizeAnchorPoint.y + (initWp.y - resizeAnchorPoint.y) * finalScale;
+                }
+            });
+
+            // 始点・終点が「座標(point)」の場合の移動
+            if (initial.start && conn.start.type === 'point') {
+                conn.start.x = resizeAnchorPoint.x + (initial.start.x - resizeAnchorPoint.x) * finalScale;
+                conn.start.y = resizeAnchorPoint.y + (initial.start.y - resizeAnchorPoint.y) * finalScale;
+            }
+            if (initial.end && conn.end.type === 'point') {
+                conn.end.x = resizeAnchorPoint.x + (initial.end.x - resizeAnchorPoint.x) * finalScale;
+                conn.end.y = resizeAnchorPoint.y + (initial.end.y - resizeAnchorPoint.y) * finalScale;
+            }
+        });
+        
+        render(); // 全描画更新
+    } 
+    // === B. 単一選択（既存のまま） ===
+    else {
+        // (以前の単一選択コードと同じ内容)
+        const startW = nodeResizeStartSize.w;
+        const startH = nodeResizeStartSize.h;
+        const startX = nodeResizeStartCoords.x;
+        const startY = nodeResizeStartCoords.y;
+
+        let newW = startW;
+        let newH = startH;
+        let newX = startX;
+        let newY = startY;
+
+        if (nodeResizeDir.includes('e')) newW = startW + dx;
+        if (nodeResizeDir.includes('w')) newW = startW - dx;
+        if (nodeResizeDir.includes('s')) newH = startH + dy;
+        if (nodeResizeDir.includes('n')) newH = startH - dy;
+
+        newW = Math.max(30, newW);
+        newH = Math.max(30, newH);
+
+        if (e.shiftKey) {
+            const size = Math.max(newW, newH);
+            newW = size;
+            newH = size;
+        }
+
+        if (nodeResizeDir.includes('w')) newX = (startX + startW) - newW;
+        if (nodeResizeDir.includes('n')) newY = (startY + startH) - newH;
+
+        const node = nodes.find(n => n.id === resizeNodeId);
+        if (node) {
+            node.x = newX;
+            node.y = newY;
+            const el = document.getElementById(resizeNodeId);
+            el.style.left = newX + 'px';
+            el.style.top = newY + 'px';
+            updateNodeSizeFromPreview(newW, newH);
+        }
+    }
+});
+
+window.addEventListener('mouseup', () => {
+    if (isNodeResizing) {
+        recordHistory();
+        resizeGroupInitialState.clear();
+        resizeConnInitialState.clear(); // ★これも忘れずにクリア
+    }
+    isNodeResizing = false;
+    resizeNodeId = null;
 });
 
 
@@ -2505,11 +2943,47 @@ function updateNodeSizeFromPreview(w, h) {
     }
 }
 
-// 画像ファイルを読み込んでBase64データにする関数
+
+// 画像ファイルを読み込んで、適切なサイズにリサイズ・圧縮してBase64にする関数
 function readImageFile(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                // A3印刷を想定しても、ノード用なら長辺1024pxあれば十分きれいなの！
+                const MAX_SIZE = 1024; 
+                let w = img.width;
+                let h = img.height;
+
+                // 比率を保ったままリサイズ計算
+                if (w > h) {
+                    if (w > MAX_SIZE) {
+                        h *= MAX_SIZE / w;
+                        w = MAX_SIZE;
+                    }
+                } else {
+                    if (h > MAX_SIZE) {
+                        w *= MAX_SIZE / h;
+                        h = MAX_SIZE;
+                    }
+                }
+
+                // Canvasを使ってリサイズ描画
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+
+                // JPEG形式、画質0.8(80%)で圧縮して書き出し
+                // これでJSONサイズが劇的に軽くなるわ！
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                resolve(dataUrl);
+            };
+            img.onerror = (err) => reject(err);
+            img.src = e.target.result;
+        };
         reader.onerror = (e) => reject(e);
         reader.readAsDataURL(file);
     });
@@ -2632,35 +3106,30 @@ function handlePointerDown(e, info) {
         dragOffset.x = pos.x;
         dragOffset.y = pos.y;
 
-    } else if (info.type === 'node-text') {
+
+        } else if (info.type === 'node-text') {
         // [パターンB] ノード内の文字ドラッグ
 
-        // 複数選択の一部なら、文字移動ではなく「ノード移動（全体）」にする
-        if (selectedNodeIds.has(info.id)) {
-            dragInfo = { ...info, type: 'node' }; // 強制的にノード移動モードへ
-            dragOffset.x = pos.x;
-            dragOffset.y = pos.y;
-            return;
-        }
+        // ★修正：選択状態に関わらず、文字を掴んだら「文字移動モード」にするわ！
+        // これでメインキャンバス上でも自由に文字位置を調整できるの。
 
-        // 未選択ノードの文字を掴んだ場合も、ノード全体移動へ
+        // もし未選択のノードの文字をいきなり掴んだ場合は、一旦そのノードを選択状態にする
         if (selectedId !== info.id) {
-            dragInfo = { ...info, type: 'node' };
             selectNode(info.id);
 
-            // メニュー更新
+            // メニューが開いていたら更新（そのノードの内容に切り替え）
             const menu = document.getElementById('context-menu');
             if (menu.style.display === 'block') {
                 const node = nodes.find(n => n.id === info.id);
-                if (node) openContextMenu(node, node.type === 'box' ? 'box' : 'node', parseInt(menu.style.left) || 0, parseInt(menu.style.top) || 0);
+                if (node) {
+                    const currentX = parseInt(menu.style.left) || 0;
+                    const currentY = parseInt(menu.style.top) || 0;
+                    openContextMenu(node, node.type === 'box' ? 'box' : 'node', currentX, currentY);
+                }
             }
-
-            dragOffset.x = pos.x;
-            dragOffset.y = pos.y;
-            return;
         }
 
-        // 単一選択での文字位置調整モード
+        // 純粋に「文字移動」として記録！
         dragInfo = info;
         dragOffset.x = pos.x;
         dragOffset.y = pos.y;
@@ -3015,27 +3484,89 @@ function startResizeNode(e, nodeId, dir) {
     nodeResizeDir = dir;
     nodeResizeStartPos = { x: e.clientX, y: e.clientY };
 
-    // 編集中としてIDをセット（これでプロパティパネルとも連動！）
     editingNodeId = nodeId;
 
-    const node = nodes.find(n => n.id === nodeId);
-    if (node) {
-        // 数値であることを保証して取得
-        nodeResizeStartSize = {
-            w: parseInt(node.style?.width) || 120,
-            h: parseInt(node.style?.height) || 60
-        };
-        // 現在の座標も記録！
-        nodeResizeStartCoords = {
-            x: node.x, // または parseFloat(node.style.left)
-            y: node.y
-        };
+    // --- 複数選択（グループリサイズ）の場合 ---
+    if (selectedNodeIds.size > 1 && selectedNodeIds.has(nodeId)) {
+        // 1. ノード情報の保存（文字情報も追加！）
+        resizeGroupInitialState.clear();
+        selectedNodeIds.forEach(id => {
+            const n = nodes.find(node => node.id === id);
+            if (n) {
+                // テキスト情報がない場合の安全策
+                const t = n.text || {};
+                
+                resizeGroupInitialState.set(id, {
+                    x: n.x,
+                    y: n.y,
+                    w: parseInt(n.style?.width) || 120,
+                    h: parseInt(n.style?.height) || 60,
+                    // ★追加：文字の位置とサイズも覚える
+                    textX: t.x !== undefined ? t.x : (parseInt(n.style?.width)||120)/2,
+                    textY: t.y !== undefined ? t.y : (parseInt(n.style?.height)||60)/2,
+                    fontSize: t.fontSize || 14
+                });
+            }
+        });
+
+        // 2. ★追加：選択された矢印情報の保存（ラベル情報も追加！）
+        resizeConnInitialState.clear();
+        selectedConnIds.forEach(id => {
+            const conn = connections.find(c => c.id === id);
+            if (conn) {
+                // Waypointsの完全コピー
+                const wpCopy = conn.waypoints.map(p => ({ ...p }));
+                let startPoint = (conn.start.type === 'point') ? { ...conn.start } : null;
+                let endPoint = (conn.end.type === 'point') ? { ...conn.end } : null;
+                
+                // ★追加：ラベル情報の保存
+                const l = conn.label || {};
+
+                resizeConnInitialState.set(id, {
+                    waypoints: wpCopy,
+                    start: startPoint,
+                    end: endPoint,
+                    // ここが追加分！
+                    fontSize: l.fontSize || 12,
+                    offsetX: l.offsetX || 0,
+                    offsetY: l.offsetY || 0
+                });
+            }
+        });
+
+        // 3. 基準点（アンカー）の計算
+        const leader = resizeGroupInitialState.get(nodeId);
+        if (dir === 'nw') {
+            resizeAnchorPoint = { x: leader.x + leader.w, y: leader.y + leader.h };
+        } else if (dir === 'ne') {
+            resizeAnchorPoint = { x: leader.x, y: leader.y + leader.h };
+        } else if (dir === 'sw') {
+            resizeAnchorPoint = { x: leader.x + leader.w, y: leader.y };
+        } else if (dir === 'se') {
+            resizeAnchorPoint = { x: leader.x, y: leader.y };
+        }
+        
+        nodeResizeStartSize = { w: leader.w, h: leader.h };
+        
+    } else {
+        // --- 単一選択（既存のまま） ---
+        resizeGroupInitialState.clear();
+        resizeConnInitialState.clear(); // クリアしておく
+        
+        const node = nodes.find(n => n.id === nodeId);
+        if (node) {
+            nodeResizeStartSize = {
+                w: parseInt(node.style?.width) || 120,
+                h: parseInt(node.style?.height) || 60
+            };
+            nodeResizeStartCoords = { x: node.x, y: node.y };
+        }
     }
 }
 
 // リサイズ中の動き
 
-// script.js - リサイズ用の mousemove リスナー（丸ごと置き換え）
+// script.js - リサイズ用の mousemove リスナー（グループリサイズ対応版）
 window.addEventListener('mousemove', (e) => {
     // ★ここが目印！これ以外の mousemove は消さないでね
     if (!isNodeResizing || !resizeNodeId) return;
@@ -3045,64 +3576,138 @@ window.addEventListener('mousemove', (e) => {
     const dx = e.clientX - nodeResizeStartPos.x;
     const dy = e.clientY - nodeResizeStartPos.y;
 
-    // 開始時の情報
-    const startW = nodeResizeStartSize.w;
-    const startH = nodeResizeStartSize.h;
-    const startX = nodeResizeStartCoords.x;
-    const startY = nodeResizeStartCoords.y;
+    // === A. 複数選択（グループリサイズ）の場合 ===
+    if (resizeGroupInitialState.size > 0) {
+        // 1. リーダーの「仮の新しいサイズ」を計算（倍率算出のためだけ）
+        let startW = nodeResizeStartSize.w;
+        let startH = nodeResizeStartSize.h;
+        let newLeaderW = startW;
+        let newLeaderH = startH;
 
-    let newW = startW;
-    let newH = startH;
-    let newX = startX;
-    let newY = startY;
+        // ハンドル操作によるサイズ変化量
+        if (nodeResizeDir.includes('e')) newLeaderW += dx;
+        if (nodeResizeDir.includes('w')) newLeaderW -= dx;
+        if (nodeResizeDir.includes('s')) newLeaderH += dy;
+        if (nodeResizeDir.includes('n')) newLeaderH -= dy;
 
-    // --- 1. 幅と高さの計算 ---
-    if (nodeResizeDir.includes('e')) newW = startW + dx;
-    if (nodeResizeDir.includes('w')) newW = startW - dx;
-    if (nodeResizeDir.includes('s')) newH = startH + dy;
-    if (nodeResizeDir.includes('n')) newH = startH - dy;
+        // 最小サイズ制限（リーダーが潰れないように）
+        newLeaderW = Math.max(30, newLeaderW);
+        newLeaderH = Math.max(30, newLeaderH);
 
-    // 最小サイズ制限
-    newW = Math.max(30, newW);
-    newH = Math.max(30, newH);
+        // 2. 倍率（Scale）の計算
+        let scaleX = newLeaderW / startW;
+        let scaleY = newLeaderH / startH;
 
-    // Shiftキー（正方形維持）
-    if (e.shiftKey) {
-        const size = Math.max(newW, newH);
-        newW = size;
-        newH = size;
-    }
+        // ★承認済みロジック：変化が大きい方を採用してアスペクト比維持！
+        let finalScale = 1.0;
+        // 1.0からのズレ（絶対値）を比較
+        if (Math.abs(scaleX - 1.0) > Math.abs(scaleY - 1.0)) {
+            finalScale = scaleX;
+        } else {
+            finalScale = scaleY;
+        }
 
-    // --- 2. 位置（X, Y）の補正計算 ---
-    // 左(w)を動かしている時
-    if (nodeResizeDir.includes('w')) {
-        newX = (startX + startW) - newW;
-    }
 
-    // 上(n)を動かしている時
-    if (nodeResizeDir.includes('n')) {
-        newY = (startY + startH) - newH;
-    }
+        // 3. ★追加：矢印（Waypoints & Label）の更新
+        resizeConnInitialState.forEach((initial, id) => {
+            const conn = connections.find(c => c.id === id);
+            if (!conn) return;
 
-    // --- 3. 反映 ---
-    const node = nodes.find(n => n.id === resizeNodeId);
-    if (node) {
-        node.x = newX;
-        node.y = newY;
+            // --- A. 形状（座標）の更新 ---
+            conn.waypoints.forEach((wp, index) => {
+                const initWp = initial.waypoints[index];
+                if (initWp) {
+                    wp.x = resizeAnchorPoint.x + (initWp.x - resizeAnchorPoint.x) * finalScale;
+                    wp.y = resizeAnchorPoint.y + (initWp.y - resizeAnchorPoint.y) * finalScale;
+                }
+            });
 
-        // DOM要素の位置更新
-        const el = document.getElementById(resizeNodeId);
-        el.style.left = newX + 'px';
-        el.style.top = newY + 'px';
+            if (initial.start && conn.start.type === 'point') {
+                conn.start.x = resizeAnchorPoint.x + (initial.start.x - resizeAnchorPoint.x) * finalScale;
+                conn.start.y = resizeAnchorPoint.y + (initial.start.y - resizeAnchorPoint.y) * finalScale;
+            }
+            if (initial.end && conn.end.type === 'point') {
+                conn.end.x = resizeAnchorPoint.x + (initial.end.x - resizeAnchorPoint.x) * finalScale;
+                conn.end.y = resizeAnchorPoint.y + (initial.end.y - resizeAnchorPoint.y) * finalScale;
+            }
 
-        // サイズ更新（既存関数を利用）
-        updateNodeSizeFromPreview(newW, newH);
+            // --- B. ★追加：ラベル（サイズと位置）の更新 ---
+            if (!conn.label) conn.label = {};
+
+            // 1. フォントサイズ
+            let targetConnFS = initial.fontSize * finalScale;
+            targetConnFS = Math.max(8, targetConnFS); // 最小8pxくらいでガード
+            conn.label.fontSize = targetConnFS;
+
+            // 2. 位置（オフセット）
+            // これで「線からの距離」も倍率に合わせて広がるから、見た目の位置関係が保たれるの！
+            conn.label.offsetX = initial.offsetX * finalScale;
+            conn.label.offsetY = initial.offsetY * finalScale;
+
+            // 3. プロパティパネル同期（もしこの線を選択中なら）
+            if (editingConnId === id) {
+                const inputConnFS = document.getElementById('input-conn-font-size');
+                if (inputConnFS) {
+                    inputConnFS.value = Math.round(targetConnFS);
+                }
+                updateConnPreview(conn);
+            }
+        });
+        
+        // 線の位置もズレるから再描画！
+        render();
+    } 
+    // === B. 単一選択（通常リサイズ）の場合 ===
+    else {
+        // --- 既存のロジック（そのまま） ---
+        const startW = nodeResizeStartSize.w;
+        const startH = nodeResizeStartSize.h;
+        const startX = nodeResizeStartCoords.x;
+        const startY = nodeResizeStartCoords.y;
+
+        let newW = startW;
+        let newH = startH;
+        let newX = startX;
+        let newY = startY;
+
+        if (nodeResizeDir.includes('e')) newW = startW + dx;
+        if (nodeResizeDir.includes('w')) newW = startW - dx;
+        if (nodeResizeDir.includes('s')) newH = startH + dy;
+        if (nodeResizeDir.includes('n')) newH = startH - dy;
+
+        newW = Math.max(30, newW);
+        newH = Math.max(30, newH);
+
+        // Shiftキー（正方形維持）
+        if (e.shiftKey) {
+            const size = Math.max(newW, newH);
+            newW = size;
+            newH = size;
+        }
+
+        if (nodeResizeDir.includes('w')) {
+            newX = (startX + startW) - newW;
+        }
+        if (nodeResizeDir.includes('n')) {
+            newY = (startY + startH) - newH;
+        }
+
+        const node = nodes.find(n => n.id === resizeNodeId);
+        if (node) {
+            node.x = newX;
+            node.y = newY;
+            const el = document.getElementById(resizeNodeId);
+            el.style.left = newX + 'px';
+            el.style.top = newY + 'px';
+            updateNodeSizeFromPreview(newW, newH);
+        }
     }
 });
 
 window.addEventListener('mouseup', () => {
     if (isNodeResizing) {
         recordHistory();
+        resizeGroupInitialState.clear(); // ★追加：初期状態マップをクリア
     }
     isNodeResizing = false;
     resizeNodeId = null;
@@ -3720,6 +4325,85 @@ window.addEventListener('mousemove', (e) => {
     // これだけで、CSS側の radial-gradient の中心が動くの！
     spotlightLayer.style.setProperty('--x', e.clientX + 'px');
     spotlightLayer.style.setProperty('--y', e.clientY + 'px');
+});
+
+// ====== script.js (末尾に追加：保存・読み込み機能) ======
+
+// 1. 保存機能
+document.getElementById('btn-save').addEventListener('click', () => {
+    // 保存するデータをまとめる
+    const saveData = {
+        version: "0.5", // バージョン管理用
+        timestamp: new Date().toISOString(),
+        appSettings: appSettings,
+        nodes: nodes,
+        connections: connections
+    };
+
+    // JSON文字列に変換
+    const jsonString = JSON.stringify(saveData, null, 2); // null, 2 で少し見やすく整形
+
+    // Blob（ファイルのようなもの）を作る
+    const blob = new Blob([jsonString], { type: "application/json" });
+
+    // ダウンロードリンクをこっそり作ってクリックする
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `relavas_data_${Date.now()}.json`; // ファイル名
+    link.click();
+
+    // 後始末
+    URL.revokeObjectURL(link.href);
+});
+
+// 2. 読み込みボタン（隠しinputをクリック）
+document.getElementById('btn-load').addEventListener('click', () => {
+    document.getElementById('file-input').click(); // input type="file" を起動
+});
+
+// 3. ファイルが選択されたら読み込む
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const json = e.target.result;
+            const data = JSON.parse(json);
+
+            // データ形式の簡易チェック（nodesがあるか？）
+            if (!data.nodes || !data.connections) {
+                alert("データの形式が正しくないようです…ごめんねなの。");
+                return;
+            }
+
+            // データを復元
+            nodes = data.nodes;
+            connections = data.connections;
+            if (data.appSettings) {
+                appSettings = data.appSettings;
+            }
+
+            // 画面反映
+            refreshScreen();
+            updateAppBackground(appSettings.backgroundColor);
+
+            // 履歴にも保存（Undoできるように）
+            recordHistory();
+
+            // inputを空にする（同じファイルを再度開けるように）
+            document.getElementById('file-input').value = '';
+            
+            // 完了メッセージ（なくてもいいけど、あると安心）
+            // alert("ファイルを読み込みました！"); 
+
+        } catch (err) {
+            console.error(err);
+            alert("読み込みに失敗しました…ファイルが壊れているかも？");
+        }
+    };
+    reader.readAsText(file);
 });
 
 // ====== アプリ起動 ======

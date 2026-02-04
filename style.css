@@ -218,12 +218,29 @@ html {
     left: 0;
     width: 100%;
     height: 100%;
-    border-radius: 4px; /* 親の角丸に合わせる */
+    border-radius: inherit;
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
     z-index: 0; /* 一番後ろ */
     pointer-events: none; /* クリックを邪魔しない */
+}
+
+.node-border-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit; /* 親の角丸を引き継ぐ */
+    box-sizing: border-box; /* 線の太さを内側に含める */
+    pointer-events: none;   /* クリックを邪魔しない */
+    z-index: 1;             /* 画像(0)より上、テキストよりは下（または上でも透過ならOK） */
+}
+
+.preview-bg-image {
+    /* (既存のstyleがあればそれに混ぜてもいいけど、念のため追記) */
+    border-radius: inherit; 
 }
 
 /* ====== ハンドル・マーカー ====== */
@@ -589,12 +606,11 @@ html {
 }
 
 #input-label:focus {
-    height: 50px;
-    /* 入力中だけ広がるギミック！ */
-    position: absolute;
-    /* 他を押し下げないように浮かせる */
-    z-index: 100;
-    width: 200px;
+
+    height: 50px; /* 高さは少し広げてもOK */
+    outline: none;
+    border-color: #007bff;
+    background: white;
     /* 幅も少し広げる */
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
