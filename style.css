@@ -1374,3 +1374,102 @@ body.presentation-mode #zoom-controls * {
 #print-watermark {
     display: none;
 }
+
+/* ====== 直接編集用テキストエリア ====== */
+#edit-overlay {
+    pointer-events: auto;
+    /* 確実にクリックできるように */
+}
+
+#direct-edit-input {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px dashed #007bff;
+    border-radius: 4px;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    color: #333;
+    font-family: sans-serif;
+    padding: 2px 4px;
+    margin: 0;
+    box-sizing: border-box;
+    /* 中心から広がるように配置するための基準 */
+    transform: translate(-50%, -50%);
+    
+    /* 入力中は影を落として浮き上がらせる */
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+
+/* ====== ツールバー個別ボタン設定（移動ボタン） ====== */
+
+/* 1. OFFの時（activeなし）：打ち消し線で「動かない」ことを表現 */
+#btn-toggle-pan:not(.active) {
+    text-decoration: line-through;
+    color: #aaa;           /* 文字を薄く */
+    opacity: 0.7;
+    background: #eee;      /* 背景も少し暗く */
+}
+
+/* 2. ONの時（activeあり）：あえて「普通のボタン」と同じ色にする（緑色を打ち消す） */
+#btn-toggle-pan.active {
+    background-color: #f8f9fa; /* 普通のグレー */
+    color: #555;               /* 普通の文字色 */
+    border-color: #ddd;        /* 普通の枠線 */
+    
+    /* 緑ボタン特有の「凹み」や「影」もリセット */
+    box-shadow: none;
+    transform: none;
+}
+
+/* 3. ONの時のホバー動作：これも「普通のボタン」と同じ動きに戻す */
+#btn-toggle-pan.active:hover {
+    background-color: #e2e6ea;
+    transform: translateY(-1px); /* ふわっと浮く */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+
+/* ====== 矢印描画モード ====== */
+
+/* Yキーを押している間のカーソル */
+body.drawing-mode,
+body.drawing-mode * {
+    cursor: crosshair !important; /* 十字カーソル */
+}
+
+/* ドラッグ中に表示される仮の線 */
+.drawing-line {
+    stroke: #555;
+    stroke-width: 2px;
+    stroke-dasharray: 4; /* 点線にして「まだ確定じゃないよ」感を出す */
+    fill: none;
+    pointer-events: none; /* マウス操作を邪魔しない */
+}
+
+
+/* ====== 整列専用メニュー ====== */
+#align-menu {
+    position: absolute;
+    width: 180px; /* 必要最低限の幅 */
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    overflow: hidden;
+    animation: fadeIn 0.1s ease-out;
+}
+
+/* 整列ボタンの見た目微調整 */
+.btn-align {
+    font-family: monospace; /* 記号を綺麗に */
+    font-size: 16px;
+    line-height: 1;
+    padding: 8px 0;
+    cursor: pointer;
+}
+.btn-align:hover {
+    background-color: #f0f7ff;
+    color: #007bff;
+}

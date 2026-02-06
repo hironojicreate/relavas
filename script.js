@@ -80,14 +80,16 @@ let nodes = [
         }
     },
 
-    // 4. チュートリアル説明書
+    // 4. チュートリアル説明書（内容更新版）
     {
         id: "tutorial-box",
         type: 'box',
-        x: 360, y: 470, // ガイド中央へ移動
-        label: "【基本操作】\n\n📝 部品編集: 右クリック\n🖐️ キャンバス移動: 背景ドラッグ\n📦 まとめて選択: 右クリック＋ドラッグ\n\n✨ 便利技:\n・線クリック: 曲がり角追加\n・線ダブルクリック: 曲がり角削除\n・Shiftドラッグ: 直角配置",
+        x: 340, y: 450, 
+        // 画像の内容に合わせてテキストを更新したわ
+        label: "【基本操作】\n★文字ダブルクリックで入力\n　(control＋returnで入力終了)\n★矢印作成：[Y] キー＋ドラッグ\n📝 部品編集: 右クリック\n🖐️ キャンバス移動: 背景ドラッグ\n📦 まとめて選択: 右クリック＋ドラッグ\n★部品の整列：まとめて選択後右クリック\n\n✨ 便利技:\n・線クリック: 曲がり角追加\n・線ダブルクリック: 曲がり角削除\n・Shiftドラッグ: 直角配置",
         style: {
-            width: 380, height: 180,
+            width: 420,  // 横幅を少し広げたの（380→420）
+            height: 260, // 行数が増えた分、高さを伸ばしたわ（180→260）
             borderColor: '#007bff',
             borderWidth: 2,
             borderStyle: 'dashed',
@@ -102,9 +104,12 @@ let nodes = [
             fontWeight: 'normal',
             align: 'left',
             bgColor: 'transparent',
-            x: 190, y: 90
+            // ボックスの真ん中に文字が来るように座標も調整済みよ
+            x: 210, // width 420 の半分
+            y: 130  // height 260 の半分
         }
     },
+
     // 5. タイトルボックス
     {
         id: "title-box",
@@ -304,6 +309,13 @@ function createNodeElement(nodeData) {
     labelSpan.style.left = tx + 'px';
     labelSpan.style.top = ty + 'px';
 
+    // ★ここに追加：文字をダブルクリックで編集開始！
+    labelSpan.addEventListener('dblclick', (e) => {
+        e.stopPropagation(); // 親への伝播を止める
+        e.preventDefault();  // ブラウザの選択動作などを止める
+        startDirectEdit('node', nodeData.id);
+    });
+
     registerInteraction(labelSpan, { type: 'node-text', id: nodeData.id });
     el.appendChild(labelSpan);
 
@@ -332,9 +344,26 @@ function createNodeElement(nodeData) {
 
     el.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        selectNode(nodeData.id);
-        openContextMenu(nodeData, 'node', e.clientX, e.clientY);
+        e.stopPropagation(); // 背景のイベントを止める
+
+        // ★★★ ここを書き換え！分岐処理 ★★★
+        
+        // ケース1: 既にこれが「複数選択の一部」として選ばれている場合
+        if (selectedNodeIds.has(nodeData.id) && selectedNodeIds.size >= 2) {
+            // 選択は維持したまま、整列メニューを開く！
+            openAlignMenu(e.clientX, e.clientY);
+        } 
+        // ケース2: 単一選択、あるいは未選択の状態
+        else {
+            // これだけを選択して、通常のプロパティメニューを開く
+            selectNode(nodeData.id);
+            openContextMenu(nodeData, 'node', e.clientX, e.clientY);
+            
+            // もし整列メニューが開いてたら閉じる
+            closeAlignMenu();
+        }
     });
+
     registerInteraction(el, { type: 'node', id: nodeData.id });
     container.appendChild(el);
 }
@@ -1066,6 +1095,12 @@ function drawConnection(conn, updatedIds) {
             bg.setAttribute("rx", 4);
             
             bg.style.pointerEvents = 'all';
+
+            bg.addEventListener('dblclick', (e) => {
+                e.stopPropagation(); e.preventDefault();
+                startDirectEdit('conn', conn.id);
+            });
+
             bg.style.cursor = (conn.id === selectedConnId) ? "move" : "pointer";
             registerInteraction(bg, { type: 'conn-label', connId: conn.id });
             bg.addEventListener('contextmenu', (e) => {
@@ -1102,6 +1137,12 @@ function drawConnection(conn, updatedIds) {
         text.setAttribute("dominant-baseline", "central");
         
         text.style.pointerEvents = "all";
+
+        text.addEventListener('dblclick', (e) => {
+            e.stopPropagation(); e.preventDefault();
+            startDirectEdit('conn', conn.id);
+        });
+
         text.style.cursor = (conn.id === selectedConnId) ? "move" : "pointer";
 
         // ★修正ポイント：縦書き・横書きで行送りの計算を変える！
@@ -3109,9 +3150,19 @@ function registerInteraction(element, info) {
 
 
 // ドラッグ開始処理の完全版
-// handlePointerDown 関数の書き換え
 function handlePointerDown(e, info) {
     if (e.type === 'touchstart') e.preventDefault();
+
+    // Yキーが押されてたら、通常操作をキャンセルして描画モードへ！
+    if (isYKeyPressed) {
+        // ノードの上でYドラッグを開始した場合
+        if (info.type === 'node' || info.type === 'box') { // boxもnode扱いならここに含まれるはず
+             startDrawingLine(e, info.id);
+             return; // ここで終了！下のドラッグ処理には行かせない
+        }
+        // 線やハンドルの上でも、そこから線を引く？
+        // 一旦「ノードの上」以外は無視するか、背景扱いにするのが安全ね。
+    }
 
     const pos = getPointerPos(e);
 
@@ -3501,7 +3552,8 @@ window.addEventListener('touchcancel', (e) => {
             selectNode(null);
             selectConnection(null);
             closeContextMenu();
-            // ★追加：サブメニューも閉じる
+            closeAlignMenu();
+
             subToolbar.classList.remove('open');
             btnMenuToggle.classList.remove('active');
         }
@@ -4124,8 +4176,18 @@ canvasContainer.addEventListener('mousedown', (e) => {
     // ツールバー等は無視
     if (e.target.closest('#toolbar') || e.target.closest('#ui-layer') || e.target.closest('#context-menu')) return;
 
-    // ★追加：Shiftキーが押されていたらパン機能は発動させない！（範囲選択に譲る）
+    // Shiftキーが押されていたらパン機能は発動させない！（範囲選択に譲る）
     if (e.shiftKey) return; 
+
+    if (isYKeyPressed) {
+        if (e.button === 0) { // 左クリックのみ
+            startDrawingLine(e, null); // null = 背景からスタート
+            return;
+        }
+    }
+
+    // 移動モードがOFFなら、ここで処理を終わらせる（＝動かない！）
+    if (!isCanvasMoveEnabled) return;
 
     if (e.button !== 0) return;
     
@@ -4137,6 +4199,10 @@ canvasContainer.addEventListener('mousedown', (e) => {
         selectNode(null);
         selectConnection(null);
         closeContextMenu();
+
+        if (typeof closeAlignMenu === 'function') {
+            closeAlignMenu(); 
+        }
 
         const subToolbar = document.getElementById('sub-toolbar');
         const btnMenuToggle = document.getElementById('btn-menu-toggle');
@@ -4356,6 +4422,25 @@ if (inputImgOpacity) {
     });
 }
 
+
+// ====== キャンバス移動ロック機能 ======
+const btnTogglePan = document.getElementById('btn-toggle-pan');
+let isCanvasMoveEnabled = true; // デフォルトは移動ON
+
+btnTogglePan.addEventListener('click', () => {
+    isCanvasMoveEnabled = !isCanvasMoveEnabled;
+    
+    if (isCanvasMoveEnabled) {
+        // 移動モード ON
+        btnTogglePan.classList.add('active'); // 打ち消し線が消える
+        canvasContainer.style.cursor = 'grab';
+    } else {
+        // 移動モード OFF（固定）
+        btnTogglePan.classList.remove('active'); // 打ち消し線が出る！
+        canvasContainer.style.cursor = 'default';
+    }
+});
+
 // ====== スポットライト機能 ======
 
 const spotlightLayer = document.getElementById('spotlight-layer');
@@ -4560,6 +4645,531 @@ btnMenuToggle.addEventListener('click', (e) => {
 subToolbar.addEventListener('click', (e) => {
     e.stopPropagation();
 });
+
+
+// ====== ダブルクリック文字編集機能 ======
+
+const editOverlay = document.getElementById('edit-overlay');
+const directInput = document.getElementById('direct-edit-input');
+let isDirectEditing = false;
+let directEditTarget = null; // { type: 'node'|'conn', id: ... }
+
+// 編集を開始する関数
+function startDirectEdit(type, id) {
+    // 既に編集中なら無視、または確定させる
+    if (isDirectEditing) finishDirectEdit();
+
+    let targetData = null;
+    let initialText = "";
+    let styleRef = {}; // フォントサイズなどの参照元
+    
+    // 座標計算用
+    let cx = 0, cy = 0;
+
+    if (type === 'node') {
+        const node = nodes.find(n => n.id === id);
+        if (!node) return;
+        targetData = node;
+        initialText = node.label || "";
+        
+        // スタイル参照
+        const t = node.text || {};
+        styleRef = {
+            fontSize: t.fontSize || 14,
+            color: t.color || '#333',
+            align: t.align || 'center',
+            fontWeight: t.fontWeight || 'normal'
+        };
+
+        // 位置計算 (ノードの中心 + テキストのズレ)
+        // ※ノードの左上(node.x, node.y) ではなく、テキストの基準位置(t.x, t.y)を使います
+        // ただし t.x, t.y はノード内相対座標なので、ノードの絶対座標を足すの！
+        const nodeW = parseInt(node.style?.width) || 120;
+        const nodeH = parseInt(node.style?.height) || 60;
+        
+        // テキスト位置が未設定なら中心
+        const tx = t.x !== undefined ? t.x : nodeW / 2;
+        const ty = t.y !== undefined ? t.y : nodeH / 2;
+
+        cx = node.x + tx;
+        cy = node.y + ty;
+
+    } else if (type === 'conn') {
+        const conn = connections.find(c => c.id === id);
+        if (!conn) return;
+        targetData = conn;
+        
+        const l = conn.label || {};
+        initialText = l.text || "";
+        
+        styleRef = {
+            fontSize: l.fontSize || 12,
+            color: l.color || '#333',
+            align: 'center', // 矢印ラベルは基本中央寄せ
+            fontWeight: l.fontWeight || 'normal'
+        };
+
+        // 矢印ラベルの中心座標を計算（drawConnectionと同じロジック）
+        let startPos = (conn.start.type === 'anchor')
+            ? getAnchorCoordinate(conn.start.nodeId, conn.start.side, conn.start.index)
+            : { x: conn.start.x, y: conn.start.y };
+        let endPos = (conn.end.type === 'anchor')
+            ? getAnchorCoordinate(conn.end.nodeId, conn.end.side, conn.end.index)
+            : { x: conn.end.x, y: conn.end.y };
+            
+        // 矢印の補正計算などは省略して、単純な中心 + オフセットで計算
+        cx = (startPos.x + endPos.x) / 2 + (l.offsetX || 0);
+        cy = (startPos.y + endPos.y) / 2 + (l.offsetY || 0);
+    }
+
+    if (!targetData) return;
+
+    isDirectEditing = true;
+    directEditTarget = { type, id };
+
+    // UI表示
+    editOverlay.style.display = 'block';
+    
+    // オーバーレイの位置を設定（world-layer内なので絶対座標でOK）
+    editOverlay.style.left = cx + 'px';
+    editOverlay.style.top = cy + 'px';
+
+    // 入力欄のスタイル適用
+    directInput.value = initialText;
+    directInput.style.fontSize = styleRef.fontSize + 'px';
+    directInput.style.color = styleRef.color;
+    directInput.style.fontWeight = styleRef.fontWeight;
+    directInput.style.textAlign = styleRef.align;
+    
+    // 幅・高さの自動調整（簡易版）
+    // 文字数に合わせて少し広げる、最低幅を確保する
+    const lines = initialText.split('\n');
+    const maxLen = Math.max(...lines.map(s => s.length));
+    const estWidth = Math.max(100, maxLen * styleRef.fontSize * 1.2 + 20);
+    const estHeight = Math.max(40, lines.length * styleRef.fontSize * 1.5 + 20);
+
+    directInput.style.width = estWidth + 'px';
+    directInput.style.height = estHeight + 'px';
+
+    // フォーカス
+    setTimeout(() => {
+        directInput.focus();
+        directInput.select(); // 全選択状態で開始（修正しやすく）
+    }, 10);
+}
+
+// 編集を確定して終了する関数
+function finishDirectEdit() {
+    if (!isDirectEditing || !directEditTarget) return;
+
+    const val = directInput.value;
+    const { type, id } = directEditTarget;
+    let changed = false;
+
+    if (type === 'node') {
+        const node = nodes.find(n => n.id === id);
+        if (node) {
+            if (node.label !== val) {
+                node.label = val;
+                changed = true;
+                // 本物DOM更新
+                const realLabel = document.getElementById('label-' + id);
+                if (realLabel) realLabel.textContent = val;
+                // プレビューがあれば更新
+                if (editingNodeId === id) updatePreview(node);
+            }
+        }
+    } else if (type === 'conn') {
+        const conn = connections.find(c => c.id === id);
+        if (conn) {
+            if (!conn.label) conn.label = {};
+            if (conn.label.text !== val) {
+                conn.label.text = val;
+                changed = true;
+                // 矢印は再描画が必要
+                render(); 
+                if (editingConnId === id) updateConnPreview(conn);
+            }
+        }
+    }
+
+    // 片付け
+    isDirectEditing = false;
+    directEditTarget = null;
+    editOverlay.style.display = 'none';
+
+    if (changed) {
+        recordHistory(); // 変更があったら履歴保存
+    }
+}
+
+// イベントリスナー：フォーカスが外れたら確定
+directInput.addEventListener('blur', () => {
+    // 少し遅らせる（ボタンクリックなどでフォーカスが移る場合の誤動作防止）
+    setTimeout(finishDirectEdit, 100);
+});
+
+// イベントリスナー：キー操作
+directInput.addEventListener('keydown', (e) => {
+    // Ctrl + Enter で確定（改行は普通のEnterでOK）
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        finishDirectEdit();
+    }
+    // Esc でキャンセル（元の値に戻すのもありだけど、今回は今の値で確定しちゃう簡易実装）
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        finishDirectEdit();    
+    }
+});
+
+
+
+// ====== Yキーで矢印描画機能 ======
+
+let isYKeyPressed = false;    // Yキーが押されているか
+let isDrawingLine = false;    // ドラッグ描画中か
+let drawingStartData = null;  // 始点データ { type, x, y, nodeId... }
+let tempLineElement = null;   // 仮の線（SVG要素）
+
+// Yキーを押した時
+window.addEventListener('keydown', (e) => {
+    // 入力欄にいるときは無視
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (e.key === 'y' || e.key === 'Y') {
+        if (!isYKeyPressed) {
+            isYKeyPressed = true;
+            document.body.classList.add('drawing-mode'); // カーソル変更
+        }
+    }
+});
+
+// Yキーを離した時
+window.addEventListener('keyup', (e) => {
+    if (e.key === 'y' || e.key === 'Y') {
+        isYKeyPressed = false;
+        document.body.classList.remove('drawing-mode');
+    }
+});
+
+// マウスダウンで描画開始
+// 描画開始（mousedownで呼ばれる）
+function startDrawingLine(e, targetNodeId) {
+    isDrawingLine = true;
+
+    // マウス位置（ワールド座標）
+    const pos = getPointerPos(e);
+    const worldX = (pos.x - viewport.x) / viewport.scale;
+    const worldY = (pos.y - viewport.y) / viewport.scale;
+
+    // 始点の決定
+    if (targetNodeId) {
+        // ノード上なら、一番近いアンカー（または中心）を始点にする
+        // ここでは簡易的に「中心」からスタートさせて、動かすとアンカーに吸着する挙動にするわ
+        const node = nodes.find(n => n.id === targetNodeId);
+        // 中心座標を計算
+        const w = parseInt(node.style?.width) || 120;
+        const h = parseInt(node.style?.height) || 60;
+        const cx = node.x + w / 2;
+        const cy = node.y + h / 2;
+
+        // ★もっと賢く：クリック位置に近いサイドを始点にする？
+        // 今回は「ノードID」を持ったアンカー扱いで開始
+        drawingStartData = { 
+            type: 'anchor', 
+            nodeId: targetNodeId, 
+            side: 'right', index: 10, // 仮の値（動くと変わる）
+            x: cx, y: cy 
+        };
+        
+        // より正確な開始位置（クリックした位置に近いアンカーを探す）
+        const closest = findClosestAnchor(worldX, worldY);
+        if (closest && closest.nodeId === targetNodeId) {
+             drawingStartData = closest;
+        }
+
+    } else {
+        // 何もないところなら「点」からスタート
+        drawingStartData = { type: 'point', x: worldX, y: worldY };
+    }
+
+    // 仮の線（SVG）を作成
+    tempLineElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    tempLineElement.setAttribute("class", "drawing-line");
+    // 初期パス
+    const sx = drawingStartData.x;
+    const sy = drawingStartData.y;
+    tempLineElement.setAttribute("d", `M ${sx} ${sy} L ${worldX} ${worldY}`);
+    
+    svgLayer.appendChild(tempLineElement);
+}
+
+// 描画中（mousemoveで呼ばれる）
+function updateDrawingLine(e) {
+    if (!isDrawingLine || !tempLineElement) return;
+
+    const pos = getPointerPos(e);
+    const worldX = (pos.x - viewport.x) / viewport.scale;
+    const worldY = (pos.y - viewport.y) / viewport.scale;
+
+    // 始点座標（始点がアンカーなら再計算不要だけど、単純化のため保持データを使う）
+    let startX = drawingStartData.x;
+    let startY = drawingStartData.y;
+
+    // 終点座標（スナップ判定！）
+    let endX = worldX;
+    let endY = worldY;
+
+    // 近くにノードがあるか？（既存の findClosestAnchor を活用）
+    const snapTarget = findClosestAnchor(worldX, worldY);
+    if (snapTarget) {
+        // 吸着！
+        endX = snapTarget.x;
+        endY = snapTarget.y;
+        
+        // スナップガイドを表示してあげる
+        snapGuide.style.display = 'block';
+        snapGuide.style.left = endX + 'px';
+        snapGuide.style.top = endY + 'px';
+    } else {
+        snapGuide.style.display = 'none';
+    }
+
+    // 線の更新
+    tempLineElement.setAttribute("d", `M ${startX} ${startY} L ${endX} ${endY}`);
+}
+
+// 描画終了（mouseupで呼ばれる）
+function finishDrawingLine(e) {
+    if (!isDrawingLine) return;
+
+    const pos = getPointerPos(e);
+    const worldX = (pos.x - viewport.x) / viewport.scale;
+    const worldY = (pos.y - viewport.y) / viewport.scale;
+
+    // 1. 終点の決定
+    let endData = { type: 'point', x: worldX, y: worldY };
+    
+    const snapTarget = findClosestAnchor(worldX, worldY);
+    if (snapTarget) {
+        endData = { 
+            type: 'anchor', 
+            nodeId: snapTarget.nodeId, 
+            side: snapTarget.side, 
+            index: snapTarget.index 
+        };
+    }
+
+    // 2. データ作成（始点と終点が同じなら作らない）
+    // (簡易チェック：距離が短すぎたらキャンセルとか)
+    const dist = Math.hypot(worldX - drawingStartData.x, worldY - drawingStartData.y);
+    
+    if (dist > 5) { // 5px以上動かしたら作成
+        const newConn = {
+            id: generateId(),
+            start: drawingStartData, // startDrawingLineで作ったデータ
+            end: endData,
+            waypoints: [],
+            style: {
+                color: '#555',
+                width: 2,
+                dash: 'solid',
+                arrow: 'end'
+            },
+            label: {
+                text: "",
+                fontSize: 12,
+                color: '#333'
+            }
+        };
+        
+        // もし始点がアンカーなら、正しいside/indexを再計算してもいいけど、
+        // startDrawingLineで計算した仮の値で一旦OKとするわ。
+        
+        connections.push(newConn);
+        recordHistory();
+        render(); // 本番描画
+    }
+
+    // 3. 後片付け
+    if (tempLineElement) tempLineElement.remove();
+    tempLineElement = null;
+    isDrawingLine = false;
+    drawingStartData = null;
+    if (snapGuide) snapGuide.style.display = 'none';
+}
+
+// Yキー描画用のイベントリスナー（既存のものとは別枠で追加）
+
+window.addEventListener('mousemove', (e) => {
+    if (isDrawingLine) {
+        e.preventDefault(); // 選択などを防止
+        updateDrawingLine(e);
+    }
+});
+
+window.addEventListener('mouseup', (e) => {
+    if (isDrawingLine) {
+        finishDrawingLine(e);
+    }
+});
+
+
+// ====== 整列メニュー制御 ======
+
+const alignMenu = document.getElementById('align-menu');
+
+// 整列メニューを開く関数
+function openAlignMenu(x, y) {
+    // 既存メニューは閉じる
+    closeContextMenu(); 
+
+    // 表示位置調整
+    const menuW = 180;
+    const menuH = 120; // だいたいの高さ
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+    
+    let posX = x;
+    let posY = y;
+
+    // 画面外にはみ出さないように
+    if (posX + menuW > winW) posX = winW - menuW - 10;
+    if (posY + menuH > winH) posY = winH - menuH - 10;
+
+    alignMenu.style.left = posX + 'px';
+    alignMenu.style.top = posY + 'px';
+    alignMenu.style.display = 'block';
+}
+
+// 整列メニューを閉じる関数
+function closeAlignMenu() {
+    alignMenu.style.display = 'none';
+}
+
+// ボタンイベント登録
+document.querySelectorAll('.btn-align').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // メニューが閉じないように（連続で押せるように）
+        alignSelectedNodes(btn.dataset.type);
+    });
+});
+
+// 整列実行ロジック（前回の提案と同じもの）
+function alignSelectedNodes(type) {
+    const targets = [];
+    selectedNodeIds.forEach(id => {
+        const node = nodes.find(n => n.id === id);
+        if (node) targets.push(node);
+    });
+
+    if (targets.length < 2) return;
+
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+
+    targets.forEach(node => {
+        const w = parseInt(node.style?.width) || 120;
+        const h = parseInt(node.style?.height) || 60;
+        if (node.x < minX) minX = node.x;
+        if (node.x + w > maxX) maxX = node.x + w;
+        if (node.y < minY) minY = node.y;
+        if (node.y + h > maxY) maxY = node.y + h;
+    });
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    targets.forEach(node => {
+        const w = parseInt(node.style?.width) || 120;
+        const h = parseInt(node.style?.height) || 60;
+
+        switch (type) {
+            case 'left': node.x = minX; break;
+            case 'center-h': node.x = centerX - (w / 2); break;
+            case 'right': node.x = maxX - w; break;
+            case 'top': node.y = minY; break;
+            case 'center-v': node.y = centerY - (h / 2); break;
+            case 'bottom': node.y = maxY - h; break;
+        }
+    });
+
+    // 等間隔ロジック
+
+    if (type === 'dist-h') {
+        // X座標で並び替え（左から順に）
+        targets.sort((a, b) => a.x - b.x);
+
+        const first = targets[0];
+        const last = targets[targets.length - 1];
+        
+        // 幅取得ヘルパー
+        const getW = (n) => parseInt(n.style?.width) || 120;
+        
+        // 全体の幅（左端から、一番右の右端まで）
+        const minX = first.x;
+        const maxX = last.x + getW(last);
+        const totalSpan = maxX - minX;
+        
+        // 全ノードの幅の合計を計算
+        let totalNodeWidth = 0;
+        targets.forEach(n => totalNodeWidth += getW(n));
+        
+        // 隙間に使えるスペースの合計
+        const totalGap = totalSpan - totalNodeWidth;
+        
+        // 1箇所あたりの隙間（ノード数 - 1 で割る）
+        const gap = totalGap / (targets.length - 1);
+        
+        // 配置適用
+        let currentX = minX;
+        targets.forEach(node => {
+            node.x = currentX;
+            // 次のノードの開始位置 ＝ 現在地 ＋ 自分の幅 ＋ 隙間
+            currentX += getW(node) + gap;
+        });
+    }
+
+    if (type === 'dist-v') {
+        // Y座標で並び替え（上から順に）
+        targets.sort((a, b) => a.y - b.y);
+
+        const first = targets[0];
+        const last = targets[targets.length - 1];
+
+        // 高さ取得ヘルパー
+        const getH = (n) => parseInt(n.style?.height) || 60;
+
+        // 全体の高さ（上端から、一番下の下端まで）
+        const minY = first.y;
+        const maxY = last.y + getH(last);
+        const totalSpan = maxY - minY;
+
+        // 全ノードの高さの合計
+        let totalNodeHeight = 0;
+        targets.forEach(n => totalNodeHeight += getH(n));
+
+        // 隙間の計算
+        const totalGap = totalSpan - totalNodeHeight;
+        const gap = totalGap / (targets.length - 1);
+
+        // 配置適用
+        let currentY = minY;
+        targets.forEach(node => {
+            node.y = currentY;
+            currentY += getH(node) + gap;
+        });
+    }
+
+    refreshScreen();
+    // 選択状態の見た目を維持
+    targets.forEach(t => {
+        const el = document.getElementById(t.id);
+        if(el) el.classList.add('selected');
+    });
+    recordHistory();
+}
 
 // ====== アプリ起動 ======
 initViewport(); // ★追加：最初に画面位置を合わせる！
