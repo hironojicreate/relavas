@@ -294,24 +294,46 @@ function createNodeElement(nodeData) {
         el.appendChild(handle);
     });
 
-    // --- 3. テキスト (そのまま) ---
+
+    // --- 3. テキスト (書き換え版) ---
     const labelSpan = document.createElement('span');
     labelSpan.className = 'node-label-real';
     labelSpan.id = 'label-' + nodeData.id;
     labelSpan.innerText = nodeData.label;
-    // ...(テキストスタイルの設定は既存のままでOK)...
-    // ↓ コピペ用（省略せずに書くなら既存のコードを使ってね）
+    
+    // スタイル設定
     labelSpan.style.color = nodeData.text?.color || '#333333';
     labelSpan.style.fontSize = (nodeData.text?.fontSize || 14) + 'px';
     labelSpan.style.fontWeight = nodeData.text?.fontWeight || 'normal';
     labelSpan.style.textAlign = nodeData.text?.align || 'center';
+    
+    // 影の設定
     const textShd = nodeData.text?.shadow || 'none';
     if (textShd === 'black') labelSpan.style.textShadow = '1px 1px 2px rgba(0,0,0,0.6)';
     else if (textShd === 'white') labelSpan.style.textShadow = '1px 1px 2px white';
     else labelSpan.style.textShadow = 'none';
+
+    // ★★★ ここから修正：背景色と枠線のロジック ★★★
+    
     const txtBg = nodeData.text?.bgColor || 'transparent';
+    const txtBorder = nodeData.text?.borderColor || 'transparent'; // ★追加：枠線色を取得
+
     labelSpan.style.backgroundColor = txtBg;
-    if (txtBg !== 'transparent') { labelSpan.style.padding = '2px 4px'; labelSpan.style.borderRadius = '4px'; }
+
+    // 背景色があるか、枠線があるなら、パディングと角丸をつける
+    if (txtBg !== 'transparent' || txtBorder !== 'transparent') { 
+        labelSpan.style.padding = '2px 4px'; 
+        labelSpan.style.borderRadius = '4px'; 
+    } else {
+        labelSpan.style.padding = '0';
+        labelSpan.style.borderRadius = '0';
+    }
+
+    // 枠線を適用
+    labelSpan.style.border = (txtBorder !== 'transparent') ? `1px solid ${txtBorder}` : 'none';
+
+    // ★★★ 修正ここまで ★★★
+
     const tx = nodeData.text?.x !== undefined ? nodeData.text.x : w / 2;
     const ty = nodeData.text?.y !== undefined ? nodeData.text.y : h / 2;
     labelSpan.style.left = tx + 'px';
@@ -5130,7 +5152,7 @@ document.getElementById('btn-save').addEventListener('click', () => {
     const currentTitle = appSettings.title || '人物相関図';
 
     const saveData = {
-        version: "1.6",
+        version: "1.61",
         timestamp: new Date().toISOString(),
         appSettings: appSettings,
         nodes: nodes,
