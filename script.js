@@ -319,6 +319,21 @@ function createNodeElement(nodeData) {
     registerInteraction(labelSpan, { type: 'node-text', id: nodeData.id });
     el.appendChild(labelSpan);
 
+    el.addEventListener('mousemove', (e) => {
+        // リサイズハンドルや他の要素の上なら何もしない
+        if (e.target !== el) return;
+
+        if (isOnNodeEdge(e, el)) {
+            el.style.cursor = 'crosshair'; // 十字カーソル
+        } else {
+            el.style.cursor = ''; // 元に戻す（grabなど）
+        }
+    });
+
+    el.addEventListener('mouseleave', () => {
+        el.style.cursor = ''; // 外に出たら確実にリセット
+    });
+    
     // --- 4. ドラッグ＆ドロップ (少し修正：imgLayerに対して反映する必要あり) ---
     // (createNodeElement内のドロップ処理も、imgLayerを書き換えるように修正が必要だけど
     //  refreshNodeStyle を呼べば解決するから、そのままで大丈夫！)
@@ -912,8 +927,11 @@ function drawConnection(conn, updatedIds) {
         // 矢印があるなら、矢印分＋ゆとりを空ける
         startPos = movePointTowards(startPos, nextPoint, gapSize);
     } else {
-        // ★ここが新機能！矢印がなくても、少しだけ（marginSize分）離す！
-        startPos = movePointTowards(startPos, nextPoint, marginSize);
+        // 接続先が「アンカー（ノード）」の時だけ隙間を空ける！
+        // 「ポイント（線や空間）」の場合は隙間ゼロ（movePointTowardsしない）でピッタリくっつけるわ
+        if (conn.start.type === 'anchor') {
+            startPos = movePointTowards(startPos, nextPoint, marginSize);
+        }
     }
 
     // 終点（end）側の調整
@@ -923,8 +941,10 @@ function drawConnection(conn, updatedIds) {
     if (style.arrow === 'end' || style.arrow === 'both') {
         endPos = movePointTowards(endPos, prevPoint, gapSize);
     } else {
-        // ★ここも新機能！矢印がなくても離す！
-        endPos = movePointTowards(endPos, prevPoint, marginSize);
+        // ここも同じく、アンカーの時だけ隙間を空ける！
+        if (conn.end.type === 'anchor') {
+            endPos = movePointTowards(endPos, prevPoint, marginSize);
+        }
     }
 
     // 2. パスデータ
@@ -1271,12 +1291,12 @@ function createOrUpdateWaypoint(conn, index, pos, updatedIds) {
             conn.waypoints.splice(index, 1);
             render(); // メイン画面更新
 
-            // ★追加：もし今編集中の線なら、プレビューも即座に更新！
+            // もし今編集中の線なら、プレビューも即座に更新！
             if (editingConnId === conn.id) {
                 updateConnPreview(conn);
             }
 
-            // ★追加：操作が終わったので履歴に保存！
+            // 操作が終わったので履歴に保存！
             recordHistory();
         });
 
@@ -1285,12 +1305,12 @@ function createOrUpdateWaypoint(conn, index, pos, updatedIds) {
 
     el.style.display = 'block';
 
-    if (conn.id === selectedConnId) {
+    if (conn.id === selectedConnId || selectedConnIds.has(conn.id)) {
         el.style.opacity = '1';
-        el.style.pointerEvents = 'auto';
+        el.style.pointerEvents = 'auto'; // 選択中は触れる
     } else {
         el.style.opacity = '0';
-        el.style.pointerEvents = 'auto'; // 透明でも掴めるように！
+        el.style.pointerEvents = 'none'; // ★非選択時は触れない（クリック透過）！
     }
 
     el.style.left = pos.x + 'px';
@@ -3150,18 +3170,17 @@ function registerInteraction(element, info) {
 
 
 // ドラッグ開始処理の完全版
+// ドラッグ開始処理の完全版（誤操作防止対応済み）
 function handlePointerDown(e, info) {
     if (e.type === 'touchstart') e.preventDefault();
 
     // Yキーが押されてたら、通常操作をキャンセルして描画モードへ！
     if (isYKeyPressed) {
         // ノードの上でYドラッグを開始した場合
-        if (info.type === 'node' || info.type === 'box') { // boxもnode扱いならここに含まれるはず
+        if (info.type === 'node' || info.type === 'box') { 
              startDrawingLine(e, info.id);
-             return; // ここで終了！下のドラッグ処理には行かせない
+             return; 
         }
-        // 線やハンドルの上でも、そこから線を引く？
-        // 一旦「ノードの上」以外は無視するか、背景扱いにするのが安全ね。
     }
 
     const pos = getPointerPos(e);
@@ -3174,44 +3193,65 @@ function handlePointerDown(e, info) {
     // ★Shiftキー判定
     const isShift = e.shiftKey;
 
+    // ★★★ ここから修正：ターゲット情報のすり替えロジック ★★★
     let targetInfo = { ...info };
 
+    // 1. ノード内の文字（node-text）の場合
     if (info.type === 'node-text') {
-        if (selectedNodeIds.has(info.id) && selectedNodeIds.size > 1) {
+        // 親ノードが選択されているかチェック
+        const isSelected = selectedNodeIds.has(info.id) || selectedId === info.id;
+        
+        if (!isSelected) {
+            // ★非選択なら、文字ではなく「ノード本体」を掴んだことにする！
+            // これで文字は動かず、ノード全体がドラッグ移動するようになるわ
             targetInfo.type = 'node';
         }
-    } else if (info.type === 'conn-label') {
-        if (selectedConnIds.has(info.connId)) {
-            targetInfo.type = 'node'; 
-            targetInfo.id = info.connId; 
+        // 選択済みなら 'node-text' のまま（文字移動モードへ）
+    } 
+    // 2. 矢印のラベル（conn-label）の場合
+    else if (info.type === 'conn-label') {
+        // 矢印が選択されているかチェック
+        const isSelected = selectedConnIds.has(info.connId) || selectedConnId === info.connId;
+
+        if (!isSelected) {
+            // ★非選択なら、ラベル移動は許可しない！
+            // 代わりに「矢印を選択するだけ」のモードに切り替えるわ
+            
+            if (!isShift) selectNode(null); // 他の選択を解除
+            selectConnection(info.connId, isShift);
+
+            // ドラッグ移動処理（moveイベント）で無視されるダミータイプにする
+            targetInfo.type = 'conn-selection-only'; 
         }
     }
+    // ★★★ 修正ここまで ★★★
+
+
+    // --- 以下、決定した targetInfo に基づいて処理 ---
 
     if (targetInfo.type === 'node') {
         // [パターンA] ノード本体操作
         
-        // ★ここを修正：Shiftキーが押されているか、まだ選ばれていないなら選択処理へ
-        // (既に選ばれているものをShiftなしでドラッグする場合は、選択解除しちゃダメだからね)
+        if (e.target.classList.contains('node') && isOnNodeEdge(e, e.target)) {
+             startDrawingLine(e, targetInfo.id);
+             return; // ここで終了！移動処理には行かせない
+        }
         
         if (targetInfo.id) {
             if (isShift) {
-                // Shift時はトグル選択（ドラッグは開始しないかもしれないけど、一旦selectNodeに任せる）
-                // ただしドラッグ操作と競合しないように、「クリックした瞬間」に切り替える
                 selectNode(targetInfo.id, true);
             } else {
-                // Shiftなし：まだ選ばれていないなら、これ「だけ」を選択
                 if (!selectedNodeIds.has(targetInfo.id) && !selectedConnIds.has(targetInfo.id)) {
                     selectNode(targetInfo.id);
                 }
-                // 既に選ばれているなら、選択状態は維持（グループドラッグのため）
                 selectedId = targetInfo.id;
             }
         }
 
         // メニュー更新
         const menu = document.getElementById('context-menu');
-        if (menu.style.display === 'block' && info.id) {
-            const node = nodes.find(n => n.id === info.id);
+        if (menu.style.display === 'block' && targetInfo.id) {
+            const node = nodes.find(n => n.id === targetInfo.id);
             if (node) {
                 const currentX = parseInt(menu.style.left) || 0;
                 const currentY = parseInt(menu.style.top) || 0;
@@ -3223,76 +3263,85 @@ function handlePointerDown(e, info) {
         dragOffset.x = pos.x;
         dragOffset.y = pos.y;
 
-    } else if (info.type === 'node-text') {
-        // [パターンB] 単体文字
-        if (selectedId !== info.id) {
-            selectNode(info.id, isShift); // Shift対応
+    } else if (targetInfo.type === 'node-text') {
+        // [パターンB] 単体文字（選択中の場合のみここに来る）
+        if (selectedId !== targetInfo.id) {
+            selectNode(targetInfo.id, isShift);
         }
-        dragInfo = info;
+        dragInfo = targetInfo;
         dragOffset.x = pos.x;
         dragOffset.y = pos.y;
 
-    } else if (info.type === 'conn-label') {
-        // [パターンC] 線ラベル
-        if (selectedConnId !== info.connId) {
-            if (!isShift) selectNode(null); // Shiftなしなら他をクリア
-            selectConnection(info.connId, isShift);
+    } else if (targetInfo.type === 'conn-label') {
+        // [パターンC] 線ラベル（選択中の場合のみここに来る）
+        if (selectedConnId !== targetInfo.connId) {
+            if (!isShift) selectNode(null);
+            selectConnection(targetInfo.connId, isShift);
         }
-        dragInfo = info;
+        dragInfo = targetInfo;
+        dragOffset.x = pos.x;
+        dragOffset.y = pos.y;
+
+    } else if (targetInfo.type === 'conn-selection-only') {
+        // [パターンEx] ラベルクリック（非選択時）
+        // 選択処理は上で済ませたので、ドラッグ移動はさせない
+        dragInfo = targetInfo; // moveイベントで無視されるタイプ
         dragOffset.x = pos.x;
         dragOffset.y = pos.y;
 
     } else {
         // [パターンD] ハンドルなど
-        if (selectedConnId !== info.connId) {
+        if (selectedConnId !== targetInfo.connId) {
             if (!isShift) selectNode(null);
-            selectConnection(info.connId, isShift);
+            selectConnection(targetInfo.connId, isShift);
         }
-        dragInfo = info;
+        dragInfo = targetInfo;
         const rect = container.getBoundingClientRect();
         dragOffset.x = rect.left;
         dragOffset.y = rect.top;
     }
 }
 
-// ★新規追加：線の直線部分を押したときの処理
-// ★修正：線の直線部分を押したときの処理
+// ====== ノードの縁判定ヘルパー ======
+function isOnNodeEdge(e, element) {
+    const rect = element.getBoundingClientRect();
+    // マウス位置（要素内座標）
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // 判定する縁の幅（px）
+    const margin = 10; 
+
+    // 上下左右のいずれかの縁に含まれているか？
+    return (x < margin || x > rect.width - margin || y < margin || y > rect.height - margin);
+}
+
+// 線の直線部分を押したときの処理
+// 線の直線部分を押したときの処理（大改造版）
 function handleLineMouseDown(e, conn) {
     if (e.button !== 0) return;
-
-    // ★削除：Shiftキーでリターンする処理を消しました
-    // if (e.shiftKey) return; 
-
     e.stopPropagation();
 
-    // ★Shiftキーならトグル選択だけして帰る（関節追加はしない）
-    if (e.shiftKey) {
-        selectConnection(conn.id, true); // true = トグルモード
+    // 1. Shiftキーならトグル選択（既存機能）
+    if (e.shiftKey && !isDrawingLine) {
+        selectConnection(conn.id, true);
         return;
     }
 
-    // 2. 未選択なら「選択」するだけ
-    if (selectedConnId !== conn.id) {
-        selectNode(null);
-        selectConnection(conn.id);
-
-        const menu = document.getElementById('context-menu');
-        if (menu.style.display === 'block') {
-            const currentX = parseInt(menu.style.left) || 0;
-            const currentY = parseInt(menu.style.top) || 0;
-            openContextMenu(conn, 'connection', currentX, currentY);
-        }
+    // ★ 2. 非選択状態なら「描画モード」へ！
+    if (selectedConnId !== conn.id && !selectedConnIds.has(conn.id)) {
+        // ここでクリックだけで終わるか、ドラッグするかは startDrawingLine 側で判断させるわ
+        // 「この線からスタートするよ」という情報を渡すの
+        startDrawingLine(e, null, conn); 
         return;
     }
 
-    // 3. 選択済みなら「関節を追加」して「即ドラッグ開始」
+    // 3. 選択済みなら「関節を追加」して「即ドラッグ開始」（既存機能）
     const pos = getPointerPos(e);
     const clickX = (pos.x - viewport.x) / viewport.scale;
     const clickY = (pos.y - viewport.y) / viewport.scale;
 
-    const allPoints = [getPointPosition(conn.start)];
-    conn.waypoints.forEach(wp => allPoints.push(wp));
-    allPoints.push(getPointPosition(conn.end));
+    const allPoints = [getPointPosition(conn.start), ...conn.waypoints, getPointPosition(conn.end)];
 
     let bestIndex = 0;
     let minDetour = Infinity;
@@ -3433,25 +3482,200 @@ function handleLineMouseDown(e, conn) {
         const targetX = (pos.x - dragOffset.x) / viewport.scale;
         const targetY = (pos.y - dragOffset.y) / viewport.scale;
 
+
+
         if (dragInfo.type === 'handle') {
             // ハンドル移動
             const conn = connections.find(c => c.id === dragInfo.connId);
-            const snapTarget = findClosestAnchor(targetX, targetY);
+            let snapped = false; // 吸着したかどうかのフラグ
 
-            if (snapTarget) {
-                snapGuide.style.display = 'block';
-                snapGuide.style.left = snapTarget.x + 'px';
-                snapGuide.style.top = snapTarget.y + 'px';
-                conn[dragInfo.handleType] = {
-                    type: 'anchor',
-                    nodeId: snapTarget.nodeId,
-                    side: snapTarget.side,
-                    index: snapTarget.index
-                };
-            } else {
-                snapGuide.style.display = 'none';
-                conn[dragInfo.handleType] = { type: 'point', x: targetX, y: targetY };
+            // ★Shiftキー時の特別処理（垂直ロック：垂線吸着）
+            // ノード吸着よりも優先するために最初に判定するわ！
+
+
+            // ★Shiftキー時の特別処理（垂直ロック：コーナー対応版・修正済み）
+            if (e.shiftKey) {
+                let pivot = null;
+                // 1. 固定点（Pivot）を特定
+                if (dragInfo.handleType === 'start') {
+                    pivot = (conn.waypoints.length > 0) ? getPointPosition(conn.waypoints[0]) : getPointPosition(conn.end);
+                } else {
+                    pivot = (conn.waypoints.length > 0) ? getPointPosition(conn.waypoints[conn.waypoints.length - 1]) : getPointPosition(conn.start);
+                }
+
+                // ====== Pivot基準の垂直ロック（変数名を pivotHit に変更） ======
+                
+                // Pivotが乗っている「すべての線分」を探す
+                const pivotHit = getClosestConnectionPoint(pivot.x, pivot.y, conn.id);
+                
+                let bestPivotSnap = null;
+                let minMouseDistToProj = Infinity; // マウスと「投影点」との距離
+
+                if (pivotHit) {
+                    const targetConn = connections.find(c => c.id === pivotHit.connId);
+                    if (targetConn) {
+                        const points = [getPointPosition(targetConn.start), ...targetConn.waypoints, getPointPosition(targetConn.end)];
+                        
+                        // 全ての区間(セグメント)をチェックする
+                        for (let i = 0; i < points.length - 1; i++) {
+                            const A = points[i];
+                            const B = points[i+1];
+
+                            // Pivotがこの区間AB上に乗っているか？ (距離が近いか)
+                            const distToSegment = Math.hypot(
+                                getClosestPointOnSegment(pivot, A, B).x - pivot.x,
+                                getClosestPointOnSegment(pivot, A, B).y - pivot.y
+                            );
+
+                            if (distToSegment < 5) {
+                                // ★乗っている！この区間の垂直ベクトルを計算
+                                const dx = B.x - A.x;
+                                const dy = B.y - A.y;
+                                
+                                // 垂直ベクトル (-dy, dx)
+                                const perpX = -dy;
+                                const perpY = dx;
+
+                                // Pivotからマウス位置へのベクトル
+                                const pToMouseX = targetX - pivot.x;
+                                const pToMouseY = targetY - pivot.y;
+
+                                // 射影計算
+                                const len2 = perpX * perpX + perpY * perpY;
+                                if (len2 !== 0) {
+                                    const t = (pToMouseX * perpX + pToMouseY * perpY) / len2;
+                                    
+                                    // 候補となる座標
+                                    const candidateX = pivot.x + perpX * t;
+                                    const candidateY = pivot.y + perpY * t;
+                                    
+                                    // ★重要判定：マウス位置に近い方を採用
+                                    const distMouse = Math.hypot(candidateX - targetX, candidateY - targetY);
+                                    
+                                    if (distMouse < minMouseDistToProj) {
+                                        minMouseDistToProj = distMouse;
+                                        bestPivotSnap = { x: candidateX, y: candidateY };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 最適な候補が見つかったら採用
+                if (bestPivotSnap) {
+                    conn[dragInfo.handleType] = { type: 'point', x: bestPivotSnap.x, y: bestPivotSnap.y };
+                    
+                    snapGuide.style.display = 'block';
+                    snapGuide.style.left = bestPivotSnap.x + 'px';
+                    snapGuide.style.top = bestPivotSnap.y + 'px';
+                    
+                    snapped = true;
+                }
+
+
+                // 2. マウスの近くにある線を探す（Pivotが浮いている場合の既存ロジック）
+                if (!snapped) {
+                    // ★ここも変更！変数名を mouseHit に変更
+                    const mouseHit = getClosestConnectionPoint(targetX, targetY, conn.id);
+
+                    if (mouseHit) {
+                        const targetConn = connections.find(c => c.id === mouseHit.connId);
+                        if (targetConn) {
+                            const points = [getPointPosition(targetConn.start), ...targetConn.waypoints, getPointPosition(targetConn.end)];
+                            
+                            let bestProj = null;
+                            let minProjDist = Infinity;
+
+                            for (let i = 0; i < points.length - 1; i++) {
+                                const a = points[i];
+                                const b = points[i+1];
+                                
+                                const proj = getClosestPointOnSegment(pivot, a, b);
+                                const distToMouse = Math.hypot(proj.x - targetX, proj.y - targetY);
+
+                                if (distToMouse < 30) {
+                                    if (distToMouse < minProjDist) {
+                                        minProjDist = distToMouse;
+                                        bestProj = proj;
+                                    }
+                                }
+                            }
+
+                            if (bestProj) {
+                                snapGuide.style.display = 'block';
+                                snapGuide.style.left = bestProj.x + 'px';
+                                snapGuide.style.top = bestProj.y + 'px';
+                                conn[dragInfo.handleType] = { type: 'point', x: bestProj.x, y: bestProj.y };
+                                snapped = true;
+                            }
+                        }
+                    }
+                }
             }
+
+            // Shiftで吸着しなかった場合（またはShiftを押していない場合）は通常処理
+            if (!snapped) {
+                // 1. ノードへの吸着
+                const snapTarget = findClosestAnchor(targetX, targetY);
+
+                if (snapTarget) {
+                    snapGuide.style.display = 'block';
+                    snapGuide.style.left = snapTarget.x + 'px';
+                    snapGuide.style.top = snapTarget.y + 'px';
+                    conn[dragInfo.handleType] = {
+                        type: 'anchor',
+                        nodeId: snapTarget.nodeId,
+                        side: snapTarget.side,
+                        index: snapTarget.index
+                    };
+                } else {
+                    // 2. 線への吸着
+                    const snapLine = getClosestConnectionPoint(targetX, targetY, conn.id);
+
+                    if (snapLine) {
+                        let finalX = snapLine.x;
+                        let finalY = snapLine.y;
+
+                        // 3. 関節への優先吸着ロジック（Shiftなしの時だけ発動！）
+                        const SNAP_RADIUS = 20;
+                        const targetConn = connections.find(c => c.id === snapLine.connId);
+
+                        if (targetConn) {
+                            const keyPoints = [];
+                            if (targetConn.start.type === 'point') keyPoints.push(targetConn.start);
+                            targetConn.waypoints.forEach(wp => keyPoints.push(wp));
+                            if (targetConn.end.type === 'point') keyPoints.push(targetConn.end);
+
+                            let minKeyDist = Infinity;
+                            let closestKeyPoint = null;
+
+                            keyPoints.forEach(kp => {
+                                const d = Math.hypot(kp.x - targetX, kp.y - targetY);
+                                if (d < minKeyDist) {
+                                    minKeyDist = d;
+                                    closestKeyPoint = kp;
+                                }
+                            });
+
+                            if (closestKeyPoint && minKeyDist < SNAP_RADIUS) {
+                                finalX = closestKeyPoint.x;
+                                finalY = closestKeyPoint.y;
+                            }
+                        }
+
+                        snapGuide.style.display = 'block';
+                        snapGuide.style.left = finalX + 'px';
+                        snapGuide.style.top = finalY + 'px';
+                        conn[dragInfo.handleType] = { type: 'point', x: finalX, y: finalY };
+
+                    } else {
+                        snapGuide.style.display = 'none';
+                        conn[dragInfo.handleType] = { type: 'point', x: targetX, y: targetY };
+                    }
+                }
+            }
+            
             render();
             if (editingConnId === conn.id) updateConnPreview(conn);
 
@@ -4854,148 +5078,255 @@ window.addEventListener('keyup', (e) => {
 });
 
 // マウスダウンで描画開始
-// 描画開始（mousedownで呼ばれる）
-function startDrawingLine(e, targetNodeId) {
-    isDrawingLine = true;
+// ====== 描画ロジック（マグネット＆垂直ロック対応） ======
 
-    // マウス位置（ワールド座標）
+let drawingSnapBaseVector = null; // 垂直ロックの基準ベクトル
+let drawingSourceConn = null;     // 描き始めの元の線（クリック判定用）
+
+// 描画開始
+// 描画開始
+function startDrawingLine(e, targetNodeId, sourceConn = null) {
+    isDrawingLine = true;
+    drawingSnapBaseVector = null;
+    drawingSourceConn = sourceConn;
+
     const pos = getPointerPos(e);
     const worldX = (pos.x - viewport.x) / viewport.scale;
     const worldY = (pos.y - viewport.y) / viewport.scale;
 
-    // 始点の決定
+    // 1. ノードからの開始
     if (targetNodeId) {
-        // ノード上なら、一番近いアンカー（または中心）を始点にする
-        // ここでは簡易的に「中心」からスタートさせて、動かすとアンカーに吸着する挙動にするわ
-        const node = nodes.find(n => n.id === targetNodeId);
-        // 中心座標を計算
-        const w = parseInt(node.style?.width) || 120;
-        const h = parseInt(node.style?.height) || 60;
-        const cx = node.x + w / 2;
-        const cy = node.y + h / 2;
-
-        // ★もっと賢く：クリック位置に近いサイドを始点にする？
-        // 今回は「ノードID」を持ったアンカー扱いで開始
-        drawingStartData = { 
-            type: 'anchor', 
-            nodeId: targetNodeId, 
-            side: 'right', index: 10, // 仮の値（動くと変わる）
-            x: cx, y: cy 
-        };
-        
-        // より正確な開始位置（クリックした位置に近いアンカーを探す）
+        // ... (前回の修正①で直したロジックそのまま) ...
         const closest = findClosestAnchor(worldX, worldY);
         if (closest && closest.nodeId === targetNodeId) {
-             drawingStartData = closest;
+            drawingStartData = { type: 'anchor', nodeId: targetNodeId, side: closest.side, index: closest.index, x: closest.x, y: closest.y };
+        } else {
+            const node = nodes.find(n => n.id === targetNodeId);
+            const w = parseInt(node.style?.width) || 120;
+            const h = parseInt(node.style?.height) || 60;
+            drawingStartData = { type: 'anchor', nodeId: targetNodeId, side: 'right', index: 10, x: node.x + w / 2, y: node.y + h / 2 };
+        }
+    } 
+    // 2. 線からの開始（または空間）
+    else {
+        // --- A. まずは線に乗っかるか判定 ---
+        let snap = null;
+        if (sourceConn) {
+             const best = getClosestConnectionPoint(worldX, worldY); 
+             if(best && best.connId === sourceConn.id) snap = best;
+             else snap = { x: worldX, y: worldY, connId: sourceConn.id }; // 計算漏れ対策
+        } else {
+             snap = getClosestConnectionPoint(worldX, worldY);
         }
 
-    } else {
-        // 何もないところなら「点」からスタート
-        drawingStartData = { type: 'point', x: worldX, y: worldY };
+        if (snap) {
+            // --- B. ★追加機能：関節への優先吸着ロジック ---
+            const SNAP_RADIUS = 20; // 関節に吸い寄せる半径（px）
+            
+            // 対象の線データを取得
+            const targetConn = connections.find(c => c.id === snap.connId);
+            if (targetConn) {
+                // その線の「すべての関節（始点・終点含む）」の座標リストを作る
+                const keyPoints = [];
+                // 始点がポイントなら追加
+                if (targetConn.start.type === 'point') keyPoints.push(targetConn.start);
+                // 中間の関節
+                targetConn.waypoints.forEach(wp => keyPoints.push(wp));
+                // 終点がポイントなら追加
+                if (targetConn.end.type === 'point') keyPoints.push(targetConn.end);
+                
+                // 一番近い関節を探す
+                let closestKeyPoint = null;
+                let minKeyDist = Infinity;
+                
+                keyPoints.forEach(kp => {
+                    const d = Math.hypot(kp.x - worldX, kp.y - worldY); // マウス位置との距離
+                    if (d < minKeyDist) {
+                        minKeyDist = d;
+                        closestKeyPoint = kp;
+                    }
+                });
+
+                // もし近くに関節があれば、snap座標をそれに書き換え！
+                if (closestKeyPoint && minKeyDist < SNAP_RADIUS) {
+                    snap.x = closestKeyPoint.x;
+                    snap.y = closestKeyPoint.y;
+                    // 関節吸着時は垂直ロック（ベクトル）を無効にする？それとも維持？
+                    // 自然なのは「関節から引くなら自由方向」かもしれないけど、
+                    // 一旦そのままにしておけばShiftで直角も効くわ。
+                }
+            }
+            // --- 追加ここまで ---
+
+            drawingStartData = { type: 'point', x: snap.x, y: snap.y };
+            if (snap.segmentVector) drawingSnapBaseVector = snap.segmentVector;
+        } else {
+            drawingStartData = { type: 'point', x: worldX, y: worldY };
+        }
     }
 
-    // 仮の線（SVG）を作成
+    // 仮の線を作成
     tempLineElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
     tempLineElement.setAttribute("class", "drawing-line");
-    // 初期パス
-    const sx = drawingStartData.x;
-    const sy = drawingStartData.y;
-    tempLineElement.setAttribute("d", `M ${sx} ${sy} L ${worldX} ${worldY}`);
-    
     svgLayer.appendChild(tempLineElement);
+    
+    updateTempLine(worldX, worldY);
 }
 
-// 描画中（mousemoveで呼ばれる）
+// 描画中
 function updateDrawingLine(e) {
     if (!isDrawingLine || !tempLineElement) return;
 
     const pos = getPointerPos(e);
-    const worldX = (pos.x - viewport.x) / viewport.scale;
-    const worldY = (pos.y - viewport.y) / viewport.scale;
+    let worldX = (pos.x - viewport.x) / viewport.scale;
+    let worldY = (pos.y - viewport.y) / viewport.scale;
 
-    // 始点座標（始点がアンカーなら再計算不要だけど、単純化のため保持データを使う）
-    let startX = drawingStartData.x;
-    let startY = drawingStartData.y;
+    // 移動距離を計算
+    const dist = Math.hypot(worldX - drawingStartData.x, worldY - drawingStartData.y);
 
-    // 終点座標（スナップ判定！）
+    // ★追加：動きが小さすぎる(10px未満)なら、まだ線を表示しない（遊びを作る）
+    if (dist < 10) {
+        tempLineElement.style.display = 'none'; // 隠す
+        if (snapGuide) snapGuide.style.display = 'none'; // ガイドも隠す
+        return; 
+    } else {
+        tempLineElement.style.display = 'block'; // 大きく動いたら表示
+    }
+
+    // Shiftキーで垂直ロック
+    if (e.shiftKey && drawingSnapBaseVector) {
+        const dx = drawingSnapBaseVector.x;
+        const dy = drawingSnapBaseVector.y;
+        
+        // 垂直ベクトル (-dy, dx)
+        const perpX = -dy;
+        const perpY = dx;
+        
+        // 始点からマウスまでのベクトル
+        const startToMouseX = worldX - drawingStartData.x;
+        const startToMouseY = worldY - drawingStartData.y;
+        
+        const len2 = perpX * perpX + perpY * perpY;
+        if (len2 !== 0) {
+            // 射影計算
+            const t = (startToMouseX * perpX + startToMouseY * perpY) / len2;
+            worldX = drawingStartData.x + perpX * t;
+            worldY = drawingStartData.y + perpY * t;
+        }
+    }
+
+    // 終点側のスナップ判定（Shift中はやらない方が自然）
     let endX = worldX;
     let endY = worldY;
 
-    // 近くにノードがあるか？（既存の findClosestAnchor を活用）
-    const snapTarget = findClosestAnchor(worldX, worldY);
-    if (snapTarget) {
-        // 吸着！
-        endX = snapTarget.x;
-        endY = snapTarget.y;
-        
-        // スナップガイドを表示してあげる
-        snapGuide.style.display = 'block';
-        snapGuide.style.left = endX + 'px';
-        snapGuide.style.top = endY + 'px';
+    // Shiftを押していない時だけスナップガイドを出す
+    if (!e.shiftKey) {
+        const snapAnchor = findClosestAnchor(worldX, worldY);
+        const snapLine = getClosestConnectionPoint(worldX, worldY);
+
+        if (snapAnchor) {
+            endX = snapAnchor.x;
+            endY = snapAnchor.y;
+            snapGuide.style.display = 'block';
+            snapGuide.style.left = endX + 'px';
+            snapGuide.style.top = endY + 'px';
+        } else if (snapLine) {
+            endX = snapLine.x;
+            endY = snapLine.y;
+            snapGuide.style.display = 'block';
+            snapGuide.style.left = endX + 'px';
+            snapGuide.style.top = endY + 'px';
+        } else {
+            snapGuide.style.display = 'none';
+        }
     } else {
         snapGuide.style.display = 'none';
     }
 
-    // 線の更新
-    tempLineElement.setAttribute("d", `M ${startX} ${startY} L ${endX} ${endY}`);
+    tempLineElement.setAttribute("d", `M ${drawingStartData.x} ${drawingStartData.y} L ${endX} ${endY}`);
 }
 
-// 描画終了（mouseupで呼ばれる）
+// 小さなヘルパー
+function updateTempLine(x, y) {
+    if(tempLineElement) tempLineElement.setAttribute("d", `M ${drawingStartData.x} ${drawingStartData.y} L ${x} ${y}`);
+}
+
+// 描画終了
 function finishDrawingLine(e) {
     if (!isDrawingLine) return;
-
+    
     const pos = getPointerPos(e);
-    const worldX = (pos.x - viewport.x) / viewport.scale;
-    const worldY = (pos.y - viewport.y) / viewport.scale;
+    let worldX = (pos.x - viewport.x) / viewport.scale;
+    let worldY = (pos.y - viewport.y) / viewport.scale;
 
-    // 1. 終点の決定
-    let endData = { type: 'point', x: worldX, y: worldY };
-    
-    const snapTarget = findClosestAnchor(worldX, worldY);
-    if (snapTarget) {
-        endData = { 
-            type: 'anchor', 
-            nodeId: snapTarget.nodeId, 
-            side: snapTarget.side, 
-            index: snapTarget.index 
-        };
+    // ★Shiftロックの最終計算（updateと同じロジック）
+    if (e.shiftKey && drawingSnapBaseVector) {
+        const dx = drawingSnapBaseVector.x;
+        const dy = drawingSnapBaseVector.y;
+        const perpX = -dy;
+        const perpY = dx;
+        const startToMouseX = worldX - drawingStartData.x;
+        const startToMouseY = worldY - drawingStartData.y;
+        const len2 = perpX * perpX + perpY * perpY;
+        if (len2 !== 0) {
+            const t = (startToMouseX * perpX + startToMouseY * perpY) / len2;
+            worldX = drawingStartData.x + perpX * t;
+            worldY = drawingStartData.y + perpY * t;
+        }
     }
 
-    // 2. データ作成（始点と終点が同じなら作らない）
-    // (簡易チェック：距離が短すぎたらキャンセルとか)
+    // ★重要：移動距離が短すぎたら「クリック（選択）」とみなす！
     const dist = Math.hypot(worldX - drawingStartData.x, worldY - drawingStartData.y);
-    
-    if (dist > 5) { // 5px以上動かしたら作成
-        const newConn = {
-            id: generateId(),
-            start: drawingStartData, // startDrawingLineで作ったデータ
-            end: endData,
-            waypoints: [],
-            style: {
-                color: '#555',
-                width: 2,
-                dash: 'solid',
-                arrow: 'end'
-            },
-            label: {
-                text: "",
-                fontSize: 12,
-                color: '#333'
-            }
-        };
+    if (dist < 10) {
+        // クリックと判定
+        if (drawingSourceConn) {
+            selectNode(null);
+            selectConnection(drawingSourceConn.id);
+            // 必要ならメニューも開く
+            // openContextMenu(drawingSourceConn, 'connection', e.clientX, e.clientY);
+        }
         
-        // もし始点がアンカーなら、正しいside/indexを再計算してもいいけど、
-        // startDrawingLineで計算した仮の値で一旦OKとするわ。
-        
-        connections.push(newConn);
-        recordHistory();
-        render(); // 本番描画
+        // 後片付けして終了
+        cleanupDrawing();
+        return;
     }
 
-    // 3. 後片付け
+    // --- 以下、通常の色作成処理 ---
+
+    let endData = { type: 'point', x: worldX, y: worldY };
+
+    if (!e.shiftKey) {
+        const snapAnchor = findClosestAnchor(worldX, worldY);
+        const snapLine = getClosestConnectionPoint(worldX, worldY);
+
+        if (snapAnchor) {
+            endData = { type: 'anchor', nodeId: snapAnchor.nodeId, side: snapAnchor.side, index: snapAnchor.index };
+        } else if (snapLine) {
+            endData = { type: 'point', x: snapLine.x, y: snapLine.y };
+        }
+    }
+
+    const newConn = {
+        id: generateId(),
+        start: drawingStartData,
+        end: endData,
+        waypoints: [],
+        style: { color: '#555', width: 2, dash: 'solid', arrow: 'end' },
+        label: { text: "", fontSize: 12, color: '#333' }
+    };
+    connections.push(newConn);
+    recordHistory();
+    render();
+
+    cleanupDrawing();
+}
+
+function cleanupDrawing() {
     if (tempLineElement) tempLineElement.remove();
     tempLineElement = null;
     isDrawingLine = false;
+    drawingSnapBaseVector = null;
+    drawingSourceConn = null;
     drawingStartData = null;
     if (snapGuide) snapGuide.style.display = 'none';
 }
@@ -5170,6 +5501,100 @@ function alignSelectedNodes(type) {
     });
     recordHistory();
 }
+
+// ====== 幾何学計算ヘルパー ======
+
+// 点pと線分abの最短距離と、その線上の座標を計算する関数
+function getClosestPointOnSegment(p, a, b) {
+    const atob = { x: b.x - a.x, y: b.y - a.y };
+    const atop = { x: p.x - a.x, y: p.y - a.y };
+    const len2 = atob.x * atob.x + atob.y * atob.y;
+    
+    let t = 0;
+    if (len2 !== 0) {
+        t = (atop.x * atob.x + atop.y * atob.y) / len2;
+    }
+    
+    // 線分の範囲内(0〜1)に収める
+    t = Math.max(0, Math.min(1, t));
+    
+    return {
+        x: a.x + atob.x * t,
+        y: a.y + atob.y * t,
+        t: t,
+        vector: atob // 線分の向きも返しておく
+    };
+}
+
+// 画面上の全コネクションの中から、マウス(x,y)に一番近い線を探す関数
+// excludeId: 自分自身にくっつかないように除外するID
+function getClosestConnectionPoint(x, y, excludeId = null) {
+    let bestPoint = null;
+    let minDist = 15; // 吸着する距離（ピクセル）
+
+    connections.forEach(conn => {
+        if (conn.id === excludeId) return;
+
+        // 線分のリストを作成（始点〜関節〜終点）
+        const points = [getPointPosition(conn.start), ...conn.waypoints, getPointPosition(conn.end)];
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const a = points[i];
+            const b = points[i+1];
+            
+            // 計算実行
+            const closest = getClosestPointOnSegment({x, y}, a, b);
+            const dist = Math.hypot(x - closest.x, y - closest.y);
+
+            if (dist < minDist) {
+                minDist = dist;
+                bestPoint = { 
+                    x: closest.x, 
+                    y: closest.y, 
+                    connId: conn.id,
+                    segmentVector: closest.vector // 垂直ロック用
+                };
+            }
+        }
+    });
+
+    return bestPoint;
+}
+
+// ====== カーソル制御（非選択線の上で十字） ======
+window.addEventListener('mousemove', (e) => {
+    // ドラッグ中などは何もしない
+    if (isDragging || isDrawingLine || isYKeyPressed || isPanning || isNodeResizing || isSelecting) {
+        return;
+    }
+
+    // ターゲットが背景、またはSVG内の要素である場合
+    // (connection-hit-area の上に来た時を検知したい)
+    
+    // ヒットエリア（透明な太い線）の上か？
+    if (e.target.classList.contains('connection-hit-area')) {
+        // 親（矢印）が選択されているかチェックしたいけど、DOMからはIDがすぐに取れないかも？
+        // でも handleLineMouseDown で制御してるから、見た目だけ十字になればOK！
+        
+        // ただし、選択中の線の上では「移動」カーソルにしたいよね。
+        // ここはCSS(:hover)と競合するけど、JSで計算して強制上書きするわ。
+        
+        const pos = getPointerPos(e);
+        const worldX = (pos.x - viewport.x) / viewport.scale;
+        const worldY = (pos.y - viewport.y) / viewport.scale;
+        
+        const hit = getClosestConnectionPoint(worldX, worldY);
+        if (hit) {
+            const isSelected = selectedConnIds.has(hit.connId) || selectedConnId === hit.connId;
+            if (!isSelected) {
+                e.target.style.cursor = 'crosshair';
+            } else {
+                // e.target.style.cursor = 'move'; // または pointer
+                e.target.style.cursor = 'copy';
+            }
+        }
+    }
+});
 
 // ====== アプリ起動 ======
 initViewport(); // ★追加：最初に画面位置を合わせる！
