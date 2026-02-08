@@ -49,7 +49,7 @@ let nodes = [
         style: {
             width: 60, height: 60, backgroundColor: "#ffffff",
             borderRadius: 10
-         },
+        },
         text: { x: 30, y: 35 }
     },
     // 2. ヴァス（右下）- 60px正方形
@@ -59,7 +59,7 @@ let nodes = [
         style: {
             width: 60, height: 60, backgroundColor: "#ffffff",
             borderRadius: 10
-         },
+        },
         text: { x: 30, y: 35 }
     },
     // 3. リラヴァス（リラの下・ヴァスの左）- 70px正方形
@@ -84,7 +84,7 @@ let nodes = [
     {
         id: "tutorial-box",
         type: 'box',
-        x: 340, y: 450, 
+        x: 340, y: 450,
         // 画像の内容に合わせてテキストを更新したわ
         label: "【基本操作】\n★文字ダブルクリックで入力\n　(control＋returnで入力終了)\n★矢印作成：[Y] キー＋ドラッグ\n📝 部品編集: 右クリック\n🖐️ キャンバス移動: 背景ドラッグ\n📦 まとめて選択: 右クリック＋ドラッグ\n★部品の整列：まとめて選択後右クリック\n\n✨ 便利技:\n・線クリック: 曲がり角追加\n・線ダブルクリック: 曲がり角削除\n・Shiftドラッグ: 直角配置",
         style: {
@@ -176,7 +176,7 @@ const container = document.getElementById('world-layer'); // ★変更：中身�
 const svgLayer = document.getElementById('svg-layer');
 const snapGuide = document.getElementById('snap-guide');
 
-// ★追加：ビューポート（視点）管理
+// ビューポート（視点）管理
 let viewport = { x: 0, y: 0, scale: 1 };
 let isPanning = false; // パン操作中フラグ
 let panStart = { x: 0, y: 0 };
@@ -193,12 +193,16 @@ let selectionStart = { x: 0, y: 0 }; // 範囲選択の開始位置
 let selectionBoxEl = null;       // 範囲選択の見た目要素
 let selectedConnIds = new Set(); // ★追加：複数の矢印IDを管理する変数
 
-// ★追加：複数選択リサイズ用の変数
+// 複数選択リサイズ用の変数
 let resizeGroupInitialState = new Map(); // 初期状態を保存する地図
 let resizeAnchorPoint = { x: 0, y: 0 };  // 拡大縮小の基準点（宇宙の中心！）
 
-// ★さらに追加：矢印のリサイズ用
+// 矢印のリサイズ用
 let resizeConnInitialState = new Map();
+
+// ドラッグの「遊び」計算用
+let dragStartRawPos = { x: 0, y: 0 }; // 最初のクリック位置
+let hasDragStarted = false;           // 遊びを超えて動き出したか？
 
 
 // ====== 初期化処理（ノード生成） ======
@@ -221,6 +225,10 @@ function initNodes() {
 function createNodeElement(nodeData) {
     const el = document.createElement('div');
     el.className = 'node';
+    // タイプがgroupならクラスを追加
+    if (nodeData.type === 'group') {
+        el.classList.add('group-node');
+    }
     el.id = nodeData.id;
     if (nodeData.id === selectedId) el.classList.add('selected');
 
@@ -247,12 +255,12 @@ function createNodeElement(nodeData) {
     // 1. 幅と高さを取得（style属性からだとまだ設定前かもしれないのでデータから取る）
     const wVal = nodeData.style?.width || 120;
     const hVal = nodeData.style?.height || 60;
-    
+
     // 2. 角丸の計算 (初期値10)
     const rPercent = nodeData.style?.borderRadius !== undefined ? nodeData.style.borderRadius : 10;
     const maxRadius = Math.min(wVal, hVal) / 2;
     const rPx = (rPercent / 100) * maxRadius;
-    
+
     el.style.borderRadius = rPx + 'px';
 
     // 影
@@ -265,13 +273,13 @@ function createNodeElement(nodeData) {
     const imgLayer = document.createElement('div');
     imgLayer.className = 'node-bg-image';
     imgLayer.id = 'img-' + nodeData.id; // IDをつけておくと後で探しやすい
-    
+
     const bgImg = nodeData.style?.backgroundImage || 'none';
     const imgOp = nodeData.style?.imageOpacity !== undefined ? nodeData.style.imageOpacity : 100; // 画像用透過率
-    
+
     imgLayer.style.backgroundImage = bgImg;
     imgLayer.style.opacity = imgOp / 100; // 画像だけ薄くする
-    
+
     el.appendChild(imgLayer); // ノードに追加
 
     // --- 2. リサイズハンドル (そのまま) ---
@@ -333,7 +341,7 @@ function createNodeElement(nodeData) {
     el.addEventListener('mouseleave', () => {
         el.style.cursor = ''; // 外に出たら確実にリセット
     });
-    
+
     // --- 4. ドラッグ＆ドロップ (少し修正：imgLayerに対して反映する必要あり) ---
     // (createNodeElement内のドロップ処理も、imgLayerを書き換えるように修正が必要だけど
     //  refreshNodeStyle を呼べば解決するから、そのままで大丈夫！)
@@ -362,18 +370,18 @@ function createNodeElement(nodeData) {
         e.stopPropagation(); // 背景のイベントを止める
 
         // ★★★ ここを書き換え！分岐処理 ★★★
-        
+
         // ケース1: 既にこれが「複数選択の一部」として選ばれている場合
         if (selectedNodeIds.has(nodeData.id) && selectedNodeIds.size >= 2) {
             // 選択は維持したまま、整列メニューを開く！
             openAlignMenu(e.clientX, e.clientY);
-        } 
+        }
         // ケース2: 単一選択、あるいは未選択の状態
         else {
             // これだけを選択して、通常のプロパティメニューを開く
             selectNode(nodeData.id);
             openContextMenu(nodeData, 'node', e.clientX, e.clientY);
-            
+
             // もし整列メニューが開いてたら閉じる
             closeAlignMenu();
         }
@@ -413,7 +421,8 @@ function selectConnection(id, addToSelection = false) {
     render(); // 画面更新
 }
 
-// selectNode 関数（トグル対応書き換え）
+
+// selectNode 関数（トグル対応書き換え ＋ グループ子要素ハイライト対応版）
 function selectNode(id, addToSelection = false) {
     // 通常クリックなら、他の選択を解除
     if (!addToSelection) {
@@ -430,11 +439,9 @@ function selectNode(id, addToSelection = false) {
             selectedNodeIds.delete(id);
             const el = document.getElementById(id);
             if (el) el.classList.remove('selected');
-            
-            // プロパティパネル用のIDがこれだった場合、選択解除に伴ってnullにするか、
-            // 他に選ばれているものがあればそれに移すのが親切だけど、一旦nullで。
+
             if (selectedId === id) selectedId = null;
-            
+
         } else {
             // 追加
             selectedNodeIds.add(id);
@@ -446,7 +453,36 @@ function selectNode(id, addToSelection = false) {
         selectedId = null;
     }
 
+    // グループの子要素の見た目を更新する関数を呼ぶ
+    updateGroupChildSelection();
+
     render(); // 線の選択状態などを更新
+}
+
+// 選択されたグループの子要素をハイライトする関数
+function updateGroupChildSelection() {
+    // 1. まず、全ての「子選択ハイライト」をリセット（消す）
+    document.querySelectorAll('.node.child-selected').forEach(el => {
+        el.classList.remove('child-selected');
+    });
+
+    // 2. 現在選択されているノードの中に「グループ（親）」があるかチェック
+    selectedNodeIds.forEach(parentId => {
+        const parentNode = nodes.find(n => n.id === parentId);
+        
+        // もしこれがグループなら、その子供たちを探す
+        if (parentNode && parentNode.type === 'group') {
+            nodes.forEach(child => {
+                if (child.parentId === parentId) {
+                    // 子供を見つけた！ハイライト用のクラスをつける
+                    const childEl = document.getElementById(child.id);
+                    if (childEl) {
+                        childEl.classList.add('child-selected');
+                    }
+                }
+            });
+        }
+    });
 }
 
 // ====== プレビュー内テキストのドラッグ ======
@@ -623,7 +659,7 @@ function initColorPalettes() {
         { id: 'palette-text-bg', target: 'text-bg' },
         { id: 'palette-bg', target: 'bg' },         // ★新規：背景色
         { id: 'palette-border', target: 'border' }, // 枠線の色
-        
+
         // 矢印用
         { id: 'palette-conn-stroke', target: 'conn-stroke' },
         { id: 'palette-conn-text', target: 'conn-text' },
@@ -919,10 +955,10 @@ function drawConnection(conn, updatedIds) {
     const gapSize = arrowLen + 6;
     const marginSize = 6;
 
-// 始点（start）側の調整
+    // 始点（start）側の調整
     // 次の点（経由点があればそれ、なければ終点）に向かって隙間を空ける
     const nextPoint = (conn.waypoints.length > 0) ? conn.waypoints[0] : endPos;
-    
+
     if (style.arrow === 'start' || style.arrow === 'both') {
         // 矢印があるなら、矢印分＋ゆとりを空ける
         startPos = movePointTowards(startPos, nextPoint, gapSize);
@@ -937,7 +973,7 @@ function drawConnection(conn, updatedIds) {
     // 終点（end）側の調整
     // 前の点（経由点があればそれ、なければ始点）に向かって隙間を空ける
     const prevPoint = (conn.waypoints.length > 0) ? conn.waypoints[conn.waypoints.length - 1] : startPos;
-    
+
     if (style.arrow === 'end' || style.arrow === 'both') {
         endPos = movePointTowards(endPos, prevPoint, gapSize);
     } else {
@@ -1088,11 +1124,11 @@ function drawConnection(conn, updatedIds) {
 
         const lines = l.text.split('\n');
         const fSize = l.fontSize || 12;
-        const lineHeight = 1.2; 
+        const lineHeight = 1.2;
 
         // --- 背景（矩形）のサイズ計算 ---
         const maxLineLen = Math.max(...lines.map(line => line.length));
-        
+
         let wRect, hRect;
         if (l.isVertical) {
             // 縦書き：幅＝行数、高さ＝最長行
@@ -1113,7 +1149,7 @@ function drawConnection(conn, updatedIds) {
             bg.setAttribute("height", hRect);
             bg.setAttribute("fill", l.bgColor);
             bg.setAttribute("rx", 4);
-            
+
             bg.style.pointerEvents = 'all';
 
             bg.addEventListener('dblclick', (e) => {
@@ -1133,7 +1169,7 @@ function drawConnection(conn, updatedIds) {
 
         // 文字描画
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        
+
         let adjX = 0;
         let adjY = 0;
         if (l.isVertical) {
@@ -1155,7 +1191,7 @@ function drawConnection(conn, updatedIds) {
         text.setAttribute("font-weight", l.fontWeight || 'normal');
         text.setAttribute("text-anchor", "middle");
         text.setAttribute("dominant-baseline", "central");
-        
+
         text.style.pointerEvents = "all";
 
         text.addEventListener('dblclick', (e) => {
@@ -1177,18 +1213,18 @@ function drawConnection(conn, updatedIds) {
 
                 // 中心からのオフセット量（行数に基づいて計算）
                 // 例: 2行なら、0行目は +0.5幅、1行目は -0.5幅 の位置
-                const lineOffset = (lines.length - 1) / 2 - index; 
-                
+                const lineOffset = (lines.length - 1) / 2 - index;
+
                 // 行間を含めた移動量
                 const xPos = cx + adjX + (lineOffset * (fSize * lineHeight));
-                
+
                 tspan.setAttribute("x", xPos);
                 tspan.setAttribute("y", cy + adjY); // Yは中心固定（文字数で勝手に伸びる）
 
             } else {
                 // === 横書きの場合 ===
                 // 行を変える ＝ 「下（Y軸プラス方向）」へずらすこと (dyを使用)
-                
+
                 tspan.setAttribute("x", cx + adjX); // Xは中心固定
 
                 if (index === 0) {
@@ -1451,11 +1487,11 @@ document.getElementById('btn-add-box').addEventListener('click', () => {
             width: 150, height: 100,
             borderColor: '#333333',
             borderWidth: 2,
-            
+
             // ★変更点：ここを「破線」「少し半透明」にするの！
-            borderStyle: 'solid', 
+            borderStyle: 'solid',
             backgroundColor: '#ffffff',
-            opacity: 100, 
+            opacity: 100,
             boxShadow: 'none',
             borderRadius: 10
         },
@@ -1487,6 +1523,19 @@ function deleteSelectedItems() {
     // A. 削除対象のリストを作成
     const nodesToDelete = new Set(selectedNodeIds);
     if (selectedId) nodesToDelete.add(selectedId);
+
+    // 削除対象に「親グループ」が含まれていたら、その子供たちもリストに追加する（道連れ）
+    // 配列をコピーして回さないとループ中にSetが増えてバグるから注意
+    const currentTargets = Array.from(nodesToDelete);
+    currentTargets.forEach(id => {
+        const node = nodes.find(n => n.id === id);
+        if (node && node.type === 'group') {
+            // この親を持つ子を探して、削除リストにぶち込む！
+            nodes.filter(child => child.parentId === id).forEach(child => {
+                nodesToDelete.add(child.id);
+            });
+        }
+    });
 
     const connsToDelete = new Set(selectedConnIds);
     if (selectedConnId) connsToDelete.add(selectedConnId);
@@ -1544,10 +1593,10 @@ function deleteSelectedItems() {
         document.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
 
         refreshScreen();
-        
+
         // もしコンテキストメニューが開いていたら閉じる
         closeContextMenu();
-        
+
         recordHistory();
     }
 }
@@ -1569,6 +1618,128 @@ window.addEventListener('keydown', (e) => {
 });
 
 
+// ====== グループ化機能ロジック ======
+
+// 1. 選択したノードをグループ化する
+function createGroupFromSelection() {
+    // 選択されているノードを取得（矢印や既に親がいる子は除外してもいいけど、今回は単純にノードだけ拾う）
+    const targets = [];
+    selectedNodeIds.forEach(id => {
+        const n = nodes.find(node => node.id === id);
+        // 既に他のグループの子である場合は、その親から引き剥がして新しいグループに入れる（奪い取る）仕様にするわ
+        if (n) targets.push(n);
+    });
+
+    if (targets.length < 2) return; // 1個じゃグループになれない
+
+    // 範囲を計算
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    targets.forEach(n => {
+        const w = parseInt(n.style?.width) || 120;
+        const h = parseInt(n.style?.height) || 60;
+        if (n.x < minX) minX = n.x;
+        if (n.y < minY) minY = n.y;
+        if (n.x + w > maxX) maxX = n.x + w;
+        if (n.y + h > maxY) maxY = n.y + h;
+    });
+
+    // 余白（パディング）をつける
+    const padding = 20;
+    minX -= padding; minY -= padding;
+    maxX += padding; maxY += padding;
+
+    // 親グループノード作成
+    const groupId = generateId();
+    const groupNode = {
+        id: groupId,
+        type: 'group', // ★ここで識別！
+        x: minX,
+        y: minY,
+        label: "グループ",
+        style: {
+            width: maxX - minX,
+            height: maxY - minY,
+            borderColor: '#555',
+            borderWidth: 2,
+            borderStyle: 'dashed',     // デフォルトは点線
+            backgroundColor: 'transparent', // デフォルトは透明
+            opacity: 100,
+            borderRadius: 10,
+            zIndex: 5 // 手前には来ないように
+        },
+        text: {
+            color: '#555',
+            fontSize: 12,
+            align: 'left', // 左上にラベル
+            x: 10, y: -20  // 枠の外（上）に名前を出すスタイルもいいけど、一旦内部左上に
+        }
+    };
+    // ラベル位置調整（内部左上）
+    groupNode.text.x = 10;
+    groupNode.text.y = 15;
+
+    // データに追加（配列の先頭に入れることで、描画順を最背面にできる！）
+    nodes.unshift(groupNode);
+
+    // 子ノードに parentId をセット
+    targets.forEach(n => {
+        n.parentId = groupId;
+        // 子は手前に表示したいから、配列の末尾に移動させると良いわね
+        // （ただしIDが変わると困るから、nodes配列内での並び替え処理）
+        moveToBack(n.id); // "front" ではなく、描画ループの最後＝手前
+    });
+
+    // 選択をグループ親に切り替え
+    selectNode(groupId);
+    closeAlignMenu(); // メニュー閉じる
+    refreshScreen();
+    recordHistory();
+}
+
+// 配列の末尾（最前面）に移動させるヘルパー
+function moveToBack(id) {
+    const idx = nodes.findIndex(n => n.id === id);
+    if (idx > -1) {
+        const n = nodes.splice(idx, 1)[0];
+        nodes.push(n);
+    }
+}
+
+// 2. グループ解除
+function ungroupNode(groupId) {
+    const groupIndex = nodes.findIndex(n => n.id === groupId);
+    if (groupIndex === -1) return;
+
+    // 子を探して解放
+    nodes.forEach(n => {
+        if (n.parentId === groupId) {
+            delete n.parentId; // 絆を断ち切る
+        }
+    });
+
+    // 親を削除
+    nodes.splice(groupIndex, 1);
+
+    selectNode(null);
+    closeContextMenu();
+    refreshScreen();
+    recordHistory();
+}
+
+// ====== グループ化ボタンイベント ======
+const btnGroupMake = document.getElementById('btn-group-make');
+if (btnGroupMake) {
+    btnGroupMake.addEventListener('click', createGroupFromSelection);
+}
+
+const btnGroupUngroup = document.getElementById('btn-group-ungroup');
+if (btnGroupUngroup) {
+    btnGroupUngroup.addEventListener('click', () => {
+        if (editingNodeId) ungroupNode(editingNodeId);
+    });
+}
+
+
 // ====== ガイド切り替え機能（新規追加） ======
 const btnToggleGuide = document.getElementById('btn-toggle-guide');
 const artboardGuide = document.getElementById('artboard-guide');
@@ -1576,10 +1747,10 @@ const artboardGuide = document.getElementById('artboard-guide');
 btnToggleGuide.addEventListener('click', () => {
     // 設定を反転させる (true -> false, false -> true)
     appSettings.showGuide = !appSettings.showGuide;
-    
+
     // 見た目を更新
     updateGuideVisibility();
-    
+
     // 変更を履歴に保存
     recordHistory();
 });
@@ -1752,7 +1923,7 @@ function openContextMenu(targetData, type, mouseX, mouseY) {
         const imgOp = s.imageOpacity !== undefined ? s.imageOpacity : 100;
         const inputImgOp = document.getElementById('input-image-opacity');
         const valImgOp = document.getElementById('val-image-opacity');
-        
+
         if (inputImgOp) {
             inputImgOp.value = imgOp;
             valImgOp.textContent = imgOp + '%';
@@ -1762,6 +1933,16 @@ function openContextMenu(targetData, type, mouseX, mouseY) {
         updatePreview(targetData);
         selectNode(targetData.id);
 
+        // グループ解除ボタンの表示制御
+        const btnUngroup = document.getElementById('btn-group-ungroup');
+        if (btnUngroup) {
+            if (targetData.type === 'group') {
+                btnUngroup.style.display = 'flex'; // 表示
+            } else {
+                btnUngroup.style.display = 'none'; // 非表示
+            }
+        }
+
     } else if (type === 'connection') {
         // --- 矢印モード ---
         panelConn.style.display = 'block';
@@ -1769,7 +1950,7 @@ function openContextMenu(targetData, type, mouseX, mouseY) {
 
         document.querySelectorAll('#conn-tabs .tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelector('#conn-tabs .tab-btn[data-target="tab-conn-style"]').classList.add('active');
-        
+
         document.querySelectorAll('#panel-conn .tab-content').forEach(c => c.classList.remove('active'));
         document.getElementById('tab-conn-style').classList.add('active');
 
@@ -2038,7 +2219,7 @@ function applyColor(target, color) {
         if (!editingConnId) return;
         const conn = connections.find(c => c.id === editingConnId);
         if (!conn) return;
-        
+
         if (target === 'conn-stroke') {
             if (!conn.style) conn.style = {};
             conn.style.color = color;
@@ -2078,7 +2259,7 @@ document.getElementById('preview-conn-svg').addEventListener('mousedown', (e) =>
     // ★変更後：クリックした要素自身、またはその親元を辿ってラベルを探す！
     // これなら <tspan> をクリックしても、親の <text> を見つけてくれるわ。
     const isLabel = e.target.closest('#preview-conn-label');
-    
+
     // 背景矩形はIDで判定しても大丈夫（中に要素がないから）
     const isBg = (e.target.id === 'preview-conn-label-bg');
 
@@ -2300,7 +2481,7 @@ function updateConnPreview(conn) {
         previewConnScale = Math.min(scaleX, scaleY);
     }
 
- 
+
     // 4. ラベル表示
     const cx = (startPos.x + endPos.x) / 2 + (l.offsetX || 0);
     const cy = (startPos.y + endPos.y) / 2 + (l.offsetY || 0);
@@ -2350,9 +2531,9 @@ function updateConnPreview(conn) {
             // 中心からのオフセット量で行を左右にずらす
             const lineOffset = (lines.length - 1) / 2 - index;
             const xPos = cx + adjX + (lineOffset * (fSize * lineHeight));
-            
+
             tspan.setAttribute("x", xPos);
-            tspan.setAttribute("y", cy + adjY); 
+            tspan.setAttribute("y", cy + adjY);
 
         } else {
             // === 横書きの場合 ===
@@ -2367,7 +2548,7 @@ function updateConnPreview(conn) {
                 tspan.setAttribute("dy", lineHeight + "em");
             }
         }
-        
+
         label.appendChild(tspan);
     });
 
@@ -2375,7 +2556,7 @@ function updateConnPreview(conn) {
     if (l.bgColor && l.bgColor !== 'transparent') {
         bg.style.display = 'block';
         bg.setAttribute("fill", l.bgColor);
-        
+
         // ★修正：背景サイズも行数を考慮して計算
         const maxLineLen = Math.max(...lines.map(line => line.length));
         let bw, bh;
@@ -2399,7 +2580,7 @@ function updateConnPreview(conn) {
     } else {
         bg.style.display = 'none';
     }
-    
+
     label.style.pointerEvents = 'auto';
     label.style.cursor = 'move';
 }
@@ -2421,7 +2602,7 @@ function applyShadow(target, val) {
 
     // 見た目更新
     refreshNodeStyle(node);
-    
+
     // ★ここを新しいIDに修正！
     updateToggleActiveState(target === 'box' ? 'toggle-box-shadow' : 'toggle-text-shadow', val);
 }
@@ -2435,8 +2616,8 @@ function refreshNodeStyle(node) {
     const el = document.getElementById(node.id);
     const label = document.getElementById('label-' + node.id);
     // ★画像レイヤーを取得
-    const imgLayer = document.getElementById('img-' + node.id); 
-    
+    const imgLayer = document.getElementById('img-' + node.id);
+
     // プレビュー要素
     const previewBox = document.getElementById('preview-box');
     const previewText = document.getElementById('preview-text');
@@ -2451,23 +2632,23 @@ function refreshNodeStyle(node) {
 
     // 2. 枠線 & 角丸（ここを整理！）
     el.style.borderColor = nodeDataStyle('borderColor', '#333333');
-    
+
     // ★枠線の太さを先に取得
     const borderWidth = nodeDataStyle('borderWidth', 2);
     el.style.borderWidth = borderWidth + 'px';
     el.style.borderStyle = nodeDataStyle('borderStyle', 'solid');
 
     // === 角丸の計算（重複を消してこれ1つにする！） ===
-    
+
     // 角丸の強さ (0〜100) を取得
     const rPercent = nodeDataStyle('borderRadius', 10);
-    
+
     // 短い方の辺の半分を「最大半径」とする
     const maxRadius = Math.min(w, h) / 2;
-    
+
     // パーセントをピクセルに変換（外側の半径）
     const rPx = (rPercent / 100) * maxRadius;
-    
+
     // 本体の角丸（外側）
     el.style.borderRadius = rPx + 'px';
 
@@ -2475,25 +2656,25 @@ function refreshNodeStyle(node) {
     if (imgLayer) {
         // 本体の半径から枠線の太さを引く！
         const innerRadius = Math.max(0, rPx - borderWidth);
-        
+
         imgLayer.style.borderRadius = innerRadius + 'px';
-        imgLayer.style.overflow = 'hidden'; 
+        imgLayer.style.overflow = 'hidden';
     }
 
     // 3. ★修正：塗りと透過（ここが変わった！）
     const bgCol = nodeDataStyle('backgroundColor', '#ffffff');
     const op = nodeDataStyle('opacity', 100); // 塗りの透過率
-    
+
     // el.style.opacity ではなく、背景色をRGBAにする
     el.style.backgroundColor = hexToRgba(bgCol, op);
-    
+
     // 本体自体の透明度はリセット（これをしないと全部消えちゃう）
-    el.style.opacity = '1'; 
+    el.style.opacity = '1';
 
     // 4. ★修正：画像と画像の透過
     const bgImg = nodeDataStyle('backgroundImage', 'none');
     const imgOp = nodeDataStyle('imageOpacity', 100); // 画像の透過率
-    
+
     if (imgLayer) {
         imgLayer.style.backgroundImage = bgImg;
         imgLayer.style.opacity = imgOp / 100;
@@ -2530,41 +2711,41 @@ function refreshNodeStyle(node) {
 
 
     // --- プレビュー反映 (ここも透過ロジックを合わせる) ---
-// --- プレビュー反映 ---
+    // --- プレビュー反映 ---
     if (isEditing) {
         // ... (サイズ計算ロジックはそのまま) ...
         const MAX_W = 260; const MAX_H = 160;
         let scale = 1;
         if (w > MAX_W || h > MAX_H) scale = Math.min(MAX_W / w, MAX_H / h);
-        
+
         previewBox.style.transform = `scale(${scale})`;
-        previewBox.style.width = w + 'px'; 
+        previewBox.style.width = w + 'px';
         previewBox.style.height = h + 'px';
-        
-        const deltaW = w - (w * scale); 
+
+        const deltaW = w - (w * scale);
         const deltaH = h - (h * scale);
-        previewBox.style.marginLeft = `-${deltaW / 2}px`; 
+        previewBox.style.marginLeft = `-${deltaW / 2}px`;
         previewBox.style.marginRight = `-${deltaW / 2}px`;
-        previewBox.style.marginTop = `-${deltaH / 2}px`; 
+        previewBox.style.marginTop = `-${deltaH / 2}px`;
         previewBox.style.marginBottom = `-${deltaH / 2}px`;
 
         previewBox.style.borderColor = el.style.borderColor;
         previewBox.style.borderWidth = el.style.borderWidth;
         previewBox.style.borderStyle = el.style.borderStyle;
         previewBox.style.borderRadius = el.style.borderRadius;
-        
+
         // 背景色は本体にセット
         previewBox.style.backgroundColor = hexToRgba(bgCol, op);
         previewBox.style.boxShadow = boxCss;
 
         // ★★★ ここが追加魔法！プレビュー用画像レイヤーの生成と制御 ★★★
-        
+
         // 1. レイヤーがあるか探して、なければ作る
         let previewImgLayer = previewBox.querySelector('.preview-bg-image');
         if (!previewImgLayer) {
             previewImgLayer = document.createElement('div');
             previewImgLayer.className = 'preview-bg-image';
-            
+
             // スタイル設定（CSSに書かずにここで完結させるわ）
             previewImgLayer.style.position = 'absolute';
             previewImgLayer.style.top = '0';
@@ -2577,7 +2758,7 @@ function refreshNodeStyle(node) {
             previewImgLayer.style.backgroundRepeat = 'no-repeat';
             previewImgLayer.style.zIndex = '0'; // 文字より後ろ！
             previewImgLayer.style.pointerEvents = 'none';
-            
+
             // プレビューボックスの一番最初に追加（文字の下に敷くため）
             previewBox.insertBefore(previewImgLayer, previewBox.firstChild);
         }
@@ -2594,28 +2775,28 @@ function refreshNodeStyle(node) {
 
         // ★★★ ここまで ★★★
 
-        
+
         // === テキストスタイルの同期（前回のコード） ===
         previewText.textContent = node.label;
-        
+
         previewText.style.zIndex = '1'; // 画像より手前に来るように念押し
         previewText.style.color = label.style.color;
         previewText.style.fontSize = label.style.fontSize;
         previewText.style.fontWeight = label.style.fontWeight;
         previewText.style.textAlign = label.style.textAlign;
         previewText.style.textShadow = label.style.textShadow;
-        
+
         previewText.style.backgroundColor = label.style.backgroundColor;
         previewText.style.padding = label.style.padding;
         previewText.style.borderRadius = label.style.borderRadius;
 
-        previewText.style.left = tx + 'px'; 
+        previewText.style.left = tx + 'px';
         previewText.style.top = ty + 'px';
-        
+
         // ハンドル逆スケール
         previewBox.querySelectorAll('.resize-handle').forEach(hd => hd.style.transform = `scale(${1 / scale})`);
     }
-    
+
     function nodeDataStyle(key, def) {
         return (node.style && node.style[key] !== undefined) ? node.style[key] : def;
     }
@@ -2630,7 +2811,7 @@ function updatePreview(nodeData) {
     editingNodeId = nodeData.id;
     refreshNodeStyle(nodeData);
     editingNodeId = originalId;
-    
+
     // 画像削除ボタンの表示制御だけここで行う
     const btnRemove = document.getElementById('btn-remove-image');
     if (btnRemove) {
@@ -2797,7 +2978,7 @@ function startResizePreview(e, direction) {
 window.addEventListener('mousemove', (e) => {
     // プレビューのリサイズ中じゃなければ何もしない
     if (!isResizingPreview) return;
-    
+
     e.preventDefault();
 
     // 1. 移動量を計算
@@ -2815,16 +2996,16 @@ window.addEventListener('mousemove', (e) => {
     // ※プレビューは中央寄せで表示されているから、どのハンドルでも
     //  「右に引けば幅が増える」「下に引けば高さが増える」という単純計算で違和感ないはずなの。
     //  （厳密には左ハンドルだと逆だけど、プレビュー操作なら直感的な「見た目の変化」重視でOK！）
-    
+
     if (resizeDirection.includes('e')) newW = startW + dx;
     if (resizeDirection.includes('w')) newW = startW - dx;
     if (resizeDirection.includes('s')) newH = startH + dy;
     if (resizeDirection.includes('n')) newH = startH - dy;
-    
+
     // 4. 反転対策：左(w)や上(n)ハンドルの場合は、マウスの動きと逆方向にサイズを変える
     //    （右に動かしたら、左側が縮む＝幅が減る、という計算）
     //    → startResizePreviewで取得した resizeDirection を使うよ
-    
+
     // 上の単純計算を少し修正：
     // 右(e)ハンドル: 右へ(+dx)行くと幅増える。OK
     // 左(w)ハンドル: 右へ(+dx)行くと幅減る。なので -dx にする。
@@ -2933,7 +3114,7 @@ window.addEventListener('mousemove', (e) => {
             if (!node.style) node.style = {};
             node.style.width = targetW;
             node.style.height = targetH;
-            
+
             if (!node.text) node.text = {};
             node.text.x = targetTextX;
             node.text.y = targetTextY;
@@ -2954,7 +3135,7 @@ window.addEventListener('mousemove', (e) => {
                 const inputH = document.getElementById('input-height');
                 // 文字サイズ入力欄も同期
                 const inputFS = document.getElementById('input-font-size');
-                
+
                 if (inputW && inputH) {
                     inputW.value = Math.round(targetW);
                     inputH.value = Math.round(targetH);
@@ -2989,9 +3170,9 @@ window.addEventListener('mousemove', (e) => {
                 conn.end.y = resizeAnchorPoint.y + (initial.end.y - resizeAnchorPoint.y) * finalScale;
             }
         });
-        
+
         render(); // 全描画更新
-    } 
+    }
     // === B. 単一選択（既存のまま） ===
     else {
         // (以前の単一選択コードと同じ内容)
@@ -3082,7 +3263,7 @@ function readImageFile(file) {
             const img = new Image();
             img.onload = () => {
                 // A3印刷を想定しても、ノード用なら長辺1024pxあれば十分きれいなの！
-                const MAX_SIZE = 1024; 
+                const MAX_SIZE = 1024;
                 let w = img.width;
                 let h = img.height;
 
@@ -3193,7 +3374,6 @@ function registerInteraction(element, info) {
 }
 
 
-// ドラッグ開始処理の完全版
 // ドラッグ開始処理の完全版（誤操作防止対応済み）
 function handlePointerDown(e, info) {
     if (e.type === 'touchstart') e.preventDefault();
@@ -3201,9 +3381,9 @@ function handlePointerDown(e, info) {
     // Yキーが押されてたら、通常操作をキャンセルして描画モードへ！
     if (isYKeyPressed) {
         // ノードの上でYドラッグを開始した場合
-        if (info.type === 'node' || info.type === 'box') { 
-             startDrawingLine(e, info.id);
-             return; 
+        if (info.type === 'node' || info.type === 'box') {
+            startDrawingLine(e, info.id);
+            return;
         }
     }
 
@@ -3224,14 +3404,14 @@ function handlePointerDown(e, info) {
     if (info.type === 'node-text') {
         // 親ノードが選択されているかチェック
         const isSelected = selectedNodeIds.has(info.id) || selectedId === info.id;
-        
+
         if (!isSelected) {
             // ★非選択なら、文字ではなく「ノード本体」を掴んだことにする！
             // これで文字は動かず、ノード全体がドラッグ移動するようになるわ
             targetInfo.type = 'node';
         }
         // 選択済みなら 'node-text' のまま（文字移動モードへ）
-    } 
+    }
     // 2. 矢印のラベル（conn-label）の場合
     else if (info.type === 'conn-label') {
         // 矢印が選択されているかチェック
@@ -3240,12 +3420,12 @@ function handlePointerDown(e, info) {
         if (!isSelected) {
             // ★非選択なら、ラベル移動は許可しない！
             // 代わりに「矢印を選択するだけ」のモードに切り替えるわ
-            
+
             if (!isShift) selectNode(null); // 他の選択を解除
             selectConnection(info.connId, isShift);
 
             // ドラッグ移動処理（moveイベント）で無視されるダミータイプにする
-            targetInfo.type = 'conn-selection-only'; 
+            targetInfo.type = 'conn-selection-only';
         }
     }
     // ★★★ 修正ここまで ★★★
@@ -3254,21 +3434,58 @@ function handlePointerDown(e, info) {
     // --- 以下、決定した targetInfo に基づいて処理 ---
 
     if (targetInfo.type === 'node') {
+
         // [パターンA] ノード本体操作
-        
-        if (e.target.classList.contains('node') && isOnNodeEdge(e, e.target)) {
-             startDrawingLine(e, targetInfo.id);
-             return; // ここで終了！移動処理には行かせない
-        }
-        
-        if (targetInfo.id) {
-            if (isShift) {
-                selectNode(targetInfo.id, true);
-            } else {
-                if (!selectedNodeIds.has(targetInfo.id) && !selectedConnIds.has(targetInfo.id)) {
-                    selectNode(targetInfo.id);
+
+        // ★修正：クリックされたノードのデータを取得
+        let clickedNode = nodes.find(n => n.id === targetInfo.id);
+        let targetIdToSelect = targetInfo.id;
+
+
+        // ★グループ判定ロジック
+        if (clickedNode && clickedNode.parentId) {
+            // 親がいる場合
+            const parent = nodes.find(n => n.id === clickedNode.parentId);
+            if (parent) {
+                // 基本は「親（グループ）」を選択ターゲットにする
+                let targetId = parent.id;
+
+                // 【例外ルール】
+                // 1. Ctrlキー (MacはCommandキー) を押している
+                // 2. ダブルクリック (e.detail が 2)
+                // 3. ★追加：既にこの子が選択されている場合（編集中はずっと子を維持！）
+                const isCtrl = e.ctrlKey || e.metaKey;
+                const isDoubleClick = (e.detail === 2);
+                const isAlreadySelected = (selectedId === clickedNode.id) || selectedNodeIds.has(clickedNode.id);
+
+                if (isCtrl || isDoubleClick || isAlreadySelected) {
+                     targetId = clickedNode.id; // 子を選択（維持）
                 }
-                selectedId = targetInfo.id;
+
+                targetIdToSelect = targetId;
+            }
+        }
+
+        // 描画モード判定（Yキー）
+        if (e.target.classList.contains('node') && isOnNodeEdge(e, e.target)) {
+
+            // ★修正：ここで targetIdToSelect（親）を使ってしまっていたのが原因なの！
+            // 強制的に「実際にクリックしたノード（clickedNode.id）」を使うように書き換えるわ。
+            // これで、グループ内でもちゃんと「子」から線が引けるようになるわよ。
+            const drawSourceId = clickedNode ? clickedNode.id : targetInfo.id;
+            startDrawingLine(e, drawSourceId); 
+            return;
+        }
+
+        if (targetIdToSelect) {
+            if (isShift) {
+                selectNode(targetIdToSelect, true);
+            } else {
+                // 既に選ばれているなら何もしない（ドラッグ開始のため）
+                if (!selectedNodeIds.has(targetIdToSelect)) {
+                    selectNode(targetIdToSelect);
+                }
+                selectedId = targetIdToSelect;
             }
         }
 
@@ -3283,7 +3500,8 @@ function handlePointerDown(e, info) {
             }
         }
 
-        dragInfo = targetInfo;
+        // dragInfo = targetInfo;
+        dragInfo = { type: 'node', id: targetIdToSelect }; // targetInfoを上書き
         dragOffset.x = pos.x;
         dragOffset.y = pos.y;
 
@@ -3324,6 +3542,11 @@ function handlePointerDown(e, info) {
         dragOffset.x = rect.left;
         dragOffset.y = rect.top;
     }
+
+    // ★追加：ドラッグ開始座標を記録 & フラグ・リセット
+    dragStartRawPos = { x: pos.x, y: pos.y };
+    hasDragStarted = false;
+
 }
 
 // ====== ノードの縁判定ヘルパー ======
@@ -3332,9 +3555,9 @@ function isOnNodeEdge(e, element) {
     // マウス位置（要素内座標）
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
+
     // 判定する縁の幅（px）
-    const margin = 10; 
+    const margin = 10;
 
     // 上下左右のいずれかの縁に含まれているか？
     return (x < margin || x > rect.width - margin || y < margin || y > rect.height - margin);
@@ -3356,7 +3579,7 @@ function handleLineMouseDown(e, conn) {
     if (selectedConnId !== conn.id && !selectedConnIds.has(conn.id)) {
         // ここでクリックだけで終わるか、ドラッグするかは startDrawingLine 側で判断させるわ
         // 「この線からスタートするよ」という情報を渡すの
-        startDrawingLine(e, null, conn); 
+        startDrawingLine(e, null, conn);
         return;
     }
 
@@ -3458,18 +3681,46 @@ function handleLineMouseDown(e, conn) {
 
 
         // Case 2: それ以外
-
-        // ノード移動（マルチセレクト対応）
+        // ノード移動（マルチセレクト対応・グループ追従版）
         if (dragInfo.type === 'node') {
-            // ★変更：ここもズーム倍率で割る！
+
+            if (!hasDragStarted) {
+                const dist = Math.hypot(pos.x - dragStartRawPos.x, pos.y - dragStartRawPos.y);
+                if (dist < 10) { 
+                    return; // まだ動かない
+                }
+                hasDragStarted = true; // 移動モード解禁！
+
+                // ★ここを追加！★
+                // 「移動開始」と判定された瞬間、基準点を「今のマウス位置」に合わせ直すの。
+                // これで、溜まっていた5px分のズレ（ワープ）が解消されて、0pxからスムーズに動き出すわ！
+                dragOffset.x = pos.x;
+                dragOffset.y = pos.y;
+            }
+
             const dx = (pos.x - dragOffset.x) / viewport.scale;
             const dy = (pos.y - dragOffset.y) / viewport.scale;
 
             dragOffset.x = pos.x;
             dragOffset.y = pos.y;
 
-            // 1. ノードを動かす
+            // 動かすべきノードIDのリスト（重複なし）
+            const movingNodeIds = new Set();
+
             selectedNodeIds.forEach(id => {
+                movingNodeIds.add(id);
+
+                // もし「グループ親」なら、その子供たちも動かすリストに追加！
+                const node = nodes.find(n => n.id === id);
+                if (node && node.type === 'group') {
+                    nodes.filter(child => child.parentId === id).forEach(child => {
+                        movingNodeIds.add(child.id);
+                    });
+                }
+            });
+
+            // 1. ノードを動かす
+            movingNodeIds.forEach(id => {
                 const node = nodes.find(n => n.id === id);
                 if (node) {
                     node.x += dx;
@@ -3482,14 +3733,35 @@ function handleLineMouseDown(e, conn) {
                 }
             });
 
-            // 2. 選択されている矢印の「関節」なども一緒に動かす
-            selectedConnIds.forEach(id => {
-                const conn = connections.find(c => c.id === id);
-                if (conn) {
+            // 2. 矢印の追従（グループ内完結の矢印も動かす！）
+            // 動いているノードのセット
+            const movingSet = movingNodeIds;
+
+            // 全矢印をチェック
+            connections.forEach(conn => {
+                // 選択されている矢印は無条件で動く（既存仕様）
+                if (selectedConnIds.has(conn.id)) {
+                    moveConnection(conn, dx, dy);
+                    return;
+                }
+
+                // ★ここが新機能！
+                // 始点ノード と 終点ノード が「両方とも動いている」なら、矢印も一緒に動かす！
+                let startMoving = false;
+                let endMoving = false;
+
+                if (conn.start.type === 'anchor' && movingSet.has(conn.start.nodeId)) startMoving = true;
+                if (conn.start.type === 'point' && movingSet.has(/* pointは判定難しいけど今回はスルー */)) { } // pointの場合は個別選択が必要
+
+                if (conn.end.type === 'anchor' && movingSet.has(conn.end.nodeId)) endMoving = true;
+
+                // 「両端が動いている」＝「グループ内完結」とみなして、ウェイポイントも動かす
+                if (startMoving && endMoving) {
                     conn.waypoints.forEach(wp => {
                         wp.x += dx;
                         wp.y += dy;
                     });
+                    // point指定の端点があればそれも動かす（両端anchorなら関係ないけど念のため）
                     if (conn.start.type === 'point') { conn.start.x += dx; conn.start.y += dy; }
                     if (conn.end.type === 'point') { conn.end.x += dx; conn.end.y += dy; }
                 }
@@ -3497,6 +3769,16 @@ function handleLineMouseDown(e, conn) {
 
             render();
             return;
+        }
+
+        // ヘルパー関数（矢印全体をずらす）
+        function moveConnection(conn, dx, dy) {
+            conn.waypoints.forEach(wp => {
+                wp.x += dx;
+                wp.y += dy;
+            });
+            if (conn.start.type === 'point') { conn.start.x += dx; conn.start.y += dy; }
+            if (conn.end.type === 'point') { conn.end.x += dx; conn.end.y += dy; }
         }
 
         // --- ハンドル・ウェイポイントの処理 ---
@@ -3528,10 +3810,10 @@ function handleLineMouseDown(e, conn) {
                 }
 
                 // ====== Pivot基準の垂直ロック（変数名を pivotHit に変更） ======
-                
+
                 // Pivotが乗っている「すべての線分」を探す
                 const pivotHit = getClosestConnectionPoint(pivot.x, pivot.y, conn.id);
-                
+
                 let bestPivotSnap = null;
                 let minMouseDistToProj = Infinity; // マウスと「投影点」との距離
 
@@ -3539,11 +3821,11 @@ function handleLineMouseDown(e, conn) {
                     const targetConn = connections.find(c => c.id === pivotHit.connId);
                     if (targetConn) {
                         const points = [getPointPosition(targetConn.start), ...targetConn.waypoints, getPointPosition(targetConn.end)];
-                        
+
                         // 全ての区間(セグメント)をチェックする
                         for (let i = 0; i < points.length - 1; i++) {
                             const A = points[i];
-                            const B = points[i+1];
+                            const B = points[i + 1];
 
                             // Pivotがこの区間AB上に乗っているか？ (距離が近いか)
                             const distToSegment = Math.hypot(
@@ -3555,7 +3837,7 @@ function handleLineMouseDown(e, conn) {
                                 // ★乗っている！この区間の垂直ベクトルを計算
                                 const dx = B.x - A.x;
                                 const dy = B.y - A.y;
-                                
+
                                 // 垂直ベクトル (-dy, dx)
                                 const perpX = -dy;
                                 const perpY = dx;
@@ -3568,14 +3850,14 @@ function handleLineMouseDown(e, conn) {
                                 const len2 = perpX * perpX + perpY * perpY;
                                 if (len2 !== 0) {
                                     const t = (pToMouseX * perpX + pToMouseY * perpY) / len2;
-                                    
+
                                     // 候補となる座標
                                     const candidateX = pivot.x + perpX * t;
                                     const candidateY = pivot.y + perpY * t;
-                                    
+
                                     // ★重要判定：マウス位置に近い方を採用
                                     const distMouse = Math.hypot(candidateX - targetX, candidateY - targetY);
-                                    
+
                                     if (distMouse < minMouseDistToProj) {
                                         minMouseDistToProj = distMouse;
                                         bestPivotSnap = { x: candidateX, y: candidateY };
@@ -3589,11 +3871,11 @@ function handleLineMouseDown(e, conn) {
                 // 最適な候補が見つかったら採用
                 if (bestPivotSnap) {
                     conn[dragInfo.handleType] = { type: 'point', x: bestPivotSnap.x, y: bestPivotSnap.y };
-                    
+
                     snapGuide.style.display = 'block';
                     snapGuide.style.left = bestPivotSnap.x + 'px';
                     snapGuide.style.top = bestPivotSnap.y + 'px';
-                    
+
                     snapped = true;
                 }
 
@@ -3607,14 +3889,14 @@ function handleLineMouseDown(e, conn) {
                         const targetConn = connections.find(c => c.id === mouseHit.connId);
                         if (targetConn) {
                             const points = [getPointPosition(targetConn.start), ...targetConn.waypoints, getPointPosition(targetConn.end)];
-                            
+
                             let bestProj = null;
                             let minProjDist = Infinity;
 
                             for (let i = 0; i < points.length - 1; i++) {
                                 const a = points[i];
-                                const b = points[i+1];
-                                
+                                const b = points[i + 1];
+
                                 const proj = getClosestPointOnSegment(pivot, a, b);
                                 const distToMouse = Math.hypot(proj.x - targetX, proj.y - targetY);
 
@@ -3699,7 +3981,7 @@ function handleLineMouseDown(e, conn) {
                     }
                 }
             }
-            
+
             render();
             if (editingConnId === conn.id) updateConnPreview(conn);
 
@@ -3835,15 +4117,15 @@ function startResizeNode(e, nodeId, dir) {
             if (n) {
                 // テキスト情報がない場合の安全策
                 const t = n.text || {};
-                
+
                 resizeGroupInitialState.set(id, {
                     x: n.x,
                     y: n.y,
                     w: parseInt(n.style?.width) || 120,
                     h: parseInt(n.style?.height) || 60,
                     // ★追加：文字の位置とサイズも覚える
-                    textX: t.x !== undefined ? t.x : (parseInt(n.style?.width)||120)/2,
-                    textY: t.y !== undefined ? t.y : (parseInt(n.style?.height)||60)/2,
+                    textX: t.x !== undefined ? t.x : (parseInt(n.style?.width) || 120) / 2,
+                    textY: t.y !== undefined ? t.y : (parseInt(n.style?.height) || 60) / 2,
                     fontSize: t.fontSize || 14
                 });
             }
@@ -3858,7 +4140,7 @@ function startResizeNode(e, nodeId, dir) {
                 const wpCopy = conn.waypoints.map(p => ({ ...p }));
                 let startPoint = (conn.start.type === 'point') ? { ...conn.start } : null;
                 let endPoint = (conn.end.type === 'point') ? { ...conn.end } : null;
-                
+
                 // ★追加：ラベル情報の保存
                 const l = conn.label || {};
 
@@ -3885,14 +4167,14 @@ function startResizeNode(e, nodeId, dir) {
         } else if (dir === 'se') {
             resizeAnchorPoint = { x: leader.x, y: leader.y };
         }
-        
+
         nodeResizeStartSize = { w: leader.w, h: leader.h };
-        
+
     } else {
         // --- 単一選択（既存のまま） ---
         resizeGroupInitialState.clear();
         resizeConnInitialState.clear(); // クリアしておく
-        
+
         const node = nodes.find(n => n.id === nodeId);
         if (node) {
             nodeResizeStartSize = {
@@ -3993,10 +4275,10 @@ window.addEventListener('mousemove', (e) => {
                 updateConnPreview(conn);
             }
         });
-        
+
         // 線の位置もズレるから再描画！
         render();
-    } 
+    }
     // === B. 単一選択（通常リサイズ）の場合 ===
     else {
         // --- 既存のロジック（そのまま） ---
@@ -4109,7 +4391,7 @@ if (btnRemoveImgUnified) {
             node.style.backgroundImage = 'none';
             refreshNodeStyle(node);
             updatePreview(node);
-            
+
             // ボタンを隠す
             btnRemoveImgUnified.style.display = 'none';
         }
@@ -4330,7 +4612,7 @@ function restoreHistory(jsonString) {
 
     // ガイド復元（前回のコード）
     if (appSettings.showGuide === undefined) appSettings.showGuide = true;
-    
+
     // タイトルの復元
     if (!appSettings.title) appSettings.title = '人物相関図作成アプリ'; // 古いデータ用
 
@@ -4439,7 +4721,7 @@ canvasContainer.addEventListener('mousedown', (e) => {
     if (e.target.closest('#toolbar') || e.target.closest('#ui-layer') || e.target.closest('#context-menu')) return;
 
     // Shiftキーが押されていたらパン機能は発動させない！（範囲選択に譲る）
-    if (e.shiftKey) return; 
+    if (e.shiftKey) return;
 
     if (isYKeyPressed) {
         if (e.button === 0) { // 左クリックのみ
@@ -4452,7 +4734,7 @@ canvasContainer.addEventListener('mousedown', (e) => {
     if (!isCanvasMoveEnabled) return;
 
     if (e.button !== 0) return;
-    
+
     // 背景などをクリックした時
     if (e.target === canvasContainer || e.target === svgLayer || e.target.id === 'artboard-guide' || e.target === container) {
         isPanning = true;
@@ -4463,7 +4745,7 @@ canvasContainer.addEventListener('mousedown', (e) => {
         closeContextMenu();
 
         if (typeof closeAlignMenu === 'function') {
-            closeAlignMenu(); 
+            closeAlignMenu();
         }
 
         const subToolbar = document.getElementById('sub-toolbar');
@@ -4691,7 +4973,7 @@ let isCanvasMoveEnabled = true; // デフォルトは移動ON
 
 btnTogglePan.addEventListener('click', () => {
     isCanvasMoveEnabled = !isCanvasMoveEnabled;
-    
+
     if (isCanvasMoveEnabled) {
         // 移動モード ON
         btnTogglePan.classList.add('active'); // 打ち消し線が消える
@@ -4744,16 +5026,16 @@ const artboardTitleText = document.getElementById('artboard-title-text');
 // 入力が確定した時（エンターキーやフォーカスが外れた時）に更新＆履歴保存
 inputAppTitle.addEventListener('change', (e) => {
     const val = e.target.value;
-    
+
     // 空っぽならデフォルトに戻す？ それとも空のまま？
     // 今回は空なら「無題」とかにせず、そのまま反映させるね
     appSettings.title = val;
-    
+
     // 画面の文字を更新
     if (artboardTitleText) {
         artboardTitleText.textContent = val || 'タイトル'; // 空なら「タイトル」と表示
     }
-    
+
     // 印刷用の透かし文字も更新！
     const wm = document.getElementById('print-watermark');
     if (wm) wm.textContent = val || '';
@@ -4775,7 +5057,7 @@ document.getElementById('btn-print').addEventListener('click', () => {
     selectNode(null);
     selectConnection(null);
     closeContextMenu();
-    
+
     // ブラウザの印刷ダイアログを起動
     window.print();
 });
@@ -4800,21 +5082,21 @@ document.getElementById('btn-save').addEventListener('click', () => {
     link.href = URL.createObjectURL(blob);
 
     // ★ここがファイル名生成の魔法！
-    
+
     // 1. ファイル名に使えない記号をアンダーバーに置換（安全対策）
     const safeTitle = currentTitle.replace(/[\\/:*?"<>|]/g, '_');
-    
+
     // 2. 日時フォーマット (YYYYMMDD-HHmm)
     const now = new Date();
     const dateStr = now.getFullYear() +
-                    String(now.getMonth() + 1).padStart(2, '0') +
-                    String(now.getDate()).padStart(2, '0') + '-' +
-                    String(now.getHours()).padStart(2, '0') +
-                    String(now.getMinutes()).padStart(2, '0');
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0') + '-' +
+        String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0');
 
     // 3. 結合！ (rilavas → relavas に揃えておくね。もし rilavas が良ければ書き換えて！)
-    link.download = `relavas_${safeTitle}_${dateStr}.json`; 
-    
+    link.download = `relavas_${safeTitle}_${dateStr}.json`;
+
     link.click();
     URL.revokeObjectURL(link.href);
 });
@@ -4855,7 +5137,7 @@ document.getElementById('file-input').addEventListener('change', (e) => {
 
             // 読み込んだ設定に合わせて、ガイドの表示/非表示を切り替えるの！
             if (typeof updateGuideVisibility === 'function') {
-                 updateGuideVisibility();
+                updateGuideVisibility();
             }
             // データにタイトルがない場合（古いファイルなど）はデフォルトに戻す
             if (!appSettings.title) appSettings.title = '人物相関図';
@@ -4877,7 +5159,7 @@ document.getElementById('file-input').addEventListener('change', (e) => {
 
             // inputを空にする（同じファイルを再度開けるように）
             document.getElementById('file-input').value = '';
-            
+
             // 完了メッセージ（なくてもいいけど、あると安心）
             // alert("ファイルを読み込みました！"); 
 
@@ -4897,7 +5179,7 @@ const subToolbar = document.getElementById('sub-toolbar');
 
 btnMenuToggle.addEventListener('click', (e) => {
     e.stopPropagation(); // 親への伝播を止める（背景クリック判定と干渉しないように）
-    
+
     // クラスを付け外しして表示切り替え
     subToolbar.classList.toggle('open');
     btnMenuToggle.classList.toggle('active');
@@ -4924,7 +5206,7 @@ function startDirectEdit(type, id) {
     let targetData = null;
     let initialText = "";
     let styleRef = {}; // フォントサイズなどの参照元
-    
+
     // 座標計算用
     let cx = 0, cy = 0;
 
@@ -4933,7 +5215,7 @@ function startDirectEdit(type, id) {
         if (!node) return;
         targetData = node;
         initialText = node.label || "";
-        
+
         // スタイル参照
         const t = node.text || {};
         styleRef = {
@@ -4948,7 +5230,7 @@ function startDirectEdit(type, id) {
         // ただし t.x, t.y はノード内相対座標なので、ノードの絶対座標を足すの！
         const nodeW = parseInt(node.style?.width) || 120;
         const nodeH = parseInt(node.style?.height) || 60;
-        
+
         // テキスト位置が未設定なら中心
         const tx = t.x !== undefined ? t.x : nodeW / 2;
         const ty = t.y !== undefined ? t.y : nodeH / 2;
@@ -4960,10 +5242,10 @@ function startDirectEdit(type, id) {
         const conn = connections.find(c => c.id === id);
         if (!conn) return;
         targetData = conn;
-        
+
         const l = conn.label || {};
         initialText = l.text || "";
-        
+
         styleRef = {
             fontSize: l.fontSize || 12,
             color: l.color || '#333',
@@ -4978,7 +5260,7 @@ function startDirectEdit(type, id) {
         let endPos = (conn.end.type === 'anchor')
             ? getAnchorCoordinate(conn.end.nodeId, conn.end.side, conn.end.index)
             : { x: conn.end.x, y: conn.end.y };
-            
+
         // 矢印の補正計算などは省略して、単純な中心 + オフセットで計算
         cx = (startPos.x + endPos.x) / 2 + (l.offsetX || 0);
         cy = (startPos.y + endPos.y) / 2 + (l.offsetY || 0);
@@ -4991,7 +5273,7 @@ function startDirectEdit(type, id) {
 
     // UI表示
     editOverlay.style.display = 'block';
-    
+
     // オーバーレイの位置を設定（world-layer内なので絶対座標でOK）
     editOverlay.style.left = cx + 'px';
     editOverlay.style.top = cy + 'px';
@@ -5002,7 +5284,7 @@ function startDirectEdit(type, id) {
     directInput.style.color = styleRef.color;
     directInput.style.fontWeight = styleRef.fontWeight;
     directInput.style.textAlign = styleRef.align;
-    
+
     // 幅・高さの自動調整（簡易版）
     // 文字数に合わせて少し広げる、最低幅を確保する
     const lines = initialText.split('\n');
@@ -5049,7 +5331,7 @@ function finishDirectEdit() {
                 conn.label.text = val;
                 changed = true;
                 // 矢印は再描画が必要
-                render(); 
+                render();
                 if (editingConnId === id) updateConnPreview(conn);
             }
         }
@@ -5081,7 +5363,7 @@ directInput.addEventListener('keydown', (e) => {
     // Esc でキャンセル（元の値に戻すのもありだけど、今回は今の値で確定しちゃう簡易実装）
     if (e.key === 'Escape') {
         e.preventDefault();
-        finishDirectEdit();    
+        finishDirectEdit();
     }
 });
 
@@ -5144,23 +5426,23 @@ function startDrawingLine(e, targetNodeId, sourceConn = null) {
             const h = parseInt(node.style?.height) || 60;
             drawingStartData = { type: 'anchor', nodeId: targetNodeId, side: 'right', index: 10, x: node.x + w / 2, y: node.y + h / 2 };
         }
-    } 
+    }
     // 2. 線からの開始（または空間）
     else {
         // --- A. まずは線に乗っかるか判定 ---
         let snap = null;
         if (sourceConn) {
-             const best = getClosestConnectionPoint(worldX, worldY); 
-             if(best && best.connId === sourceConn.id) snap = best;
-             else snap = { x: worldX, y: worldY, connId: sourceConn.id }; // 計算漏れ対策
+            const best = getClosestConnectionPoint(worldX, worldY);
+            if (best && best.connId === sourceConn.id) snap = best;
+            else snap = { x: worldX, y: worldY, connId: sourceConn.id }; // 計算漏れ対策
         } else {
-             snap = getClosestConnectionPoint(worldX, worldY);
+            snap = getClosestConnectionPoint(worldX, worldY);
         }
 
         if (snap) {
             // --- B. ★追加機能：関節への優先吸着ロジック ---
             const SNAP_RADIUS = 20; // 関節に吸い寄せる半径（px）
-            
+
             // 対象の線データを取得
             const targetConn = connections.find(c => c.id === snap.connId);
             if (targetConn) {
@@ -5172,11 +5454,11 @@ function startDrawingLine(e, targetNodeId, sourceConn = null) {
                 targetConn.waypoints.forEach(wp => keyPoints.push(wp));
                 // 終点がポイントなら追加
                 if (targetConn.end.type === 'point') keyPoints.push(targetConn.end);
-                
+
                 // 一番近い関節を探す
                 let closestKeyPoint = null;
                 let minKeyDist = Infinity;
-                
+
                 keyPoints.forEach(kp => {
                     const d = Math.hypot(kp.x - worldX, kp.y - worldY); // マウス位置との距離
                     if (d < minKeyDist) {
@@ -5207,7 +5489,7 @@ function startDrawingLine(e, targetNodeId, sourceConn = null) {
     tempLineElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
     tempLineElement.setAttribute("class", "drawing-line");
     svgLayer.appendChild(tempLineElement);
-    
+
     updateTempLine(worldX, worldY);
 }
 
@@ -5226,7 +5508,7 @@ function updateDrawingLine(e) {
     if (dist < 10) {
         tempLineElement.style.display = 'none'; // 隠す
         if (snapGuide) snapGuide.style.display = 'none'; // ガイドも隠す
-        return; 
+        return;
     } else {
         tempLineElement.style.display = 'block'; // 大きく動いたら表示
     }
@@ -5235,15 +5517,15 @@ function updateDrawingLine(e) {
     if (e.shiftKey && drawingSnapBaseVector) {
         const dx = drawingSnapBaseVector.x;
         const dy = drawingSnapBaseVector.y;
-        
+
         // 垂直ベクトル (-dy, dx)
         const perpX = -dy;
         const perpY = dx;
-        
+
         // 始点からマウスまでのベクトル
         const startToMouseX = worldX - drawingStartData.x;
         const startToMouseY = worldY - drawingStartData.y;
-        
+
         const len2 = perpX * perpX + perpY * perpY;
         if (len2 !== 0) {
             // 射影計算
@@ -5286,13 +5568,13 @@ function updateDrawingLine(e) {
 
 // 小さなヘルパー
 function updateTempLine(x, y) {
-    if(tempLineElement) tempLineElement.setAttribute("d", `M ${drawingStartData.x} ${drawingStartData.y} L ${x} ${y}`);
+    if (tempLineElement) tempLineElement.setAttribute("d", `M ${drawingStartData.x} ${drawingStartData.y} L ${x} ${y}`);
 }
 
 // 描画終了
 function finishDrawingLine(e) {
     if (!isDrawingLine) return;
-    
+
     const pos = getPointerPos(e);
     let worldX = (pos.x - viewport.x) / viewport.scale;
     let worldY = (pos.y - viewport.y) / viewport.scale;
@@ -5323,7 +5605,7 @@ function finishDrawingLine(e) {
             // 必要ならメニューも開く
             // openContextMenu(drawingSourceConn, 'connection', e.clientX, e.clientY);
         }
-        
+
         // 後片付けして終了
         cleanupDrawing();
         return;
@@ -5392,14 +5674,14 @@ const alignMenu = document.getElementById('align-menu');
 // 整列メニューを開く関数
 function openAlignMenu(x, y) {
     // 既存メニューは閉じる
-    closeContextMenu(); 
+    closeContextMenu();
 
     // 表示位置調整
     const menuW = 180;
     const menuH = 120; // だいたいの高さ
     const winW = window.innerWidth;
     const winH = window.innerHeight;
-    
+
     let posX = x;
     let posY = y;
 
@@ -5472,25 +5754,25 @@ function alignSelectedNodes(type) {
 
         const first = targets[0];
         const last = targets[targets.length - 1];
-        
+
         // 幅取得ヘルパー
         const getW = (n) => parseInt(n.style?.width) || 120;
-        
+
         // 全体の幅（左端から、一番右の右端まで）
         const minX = first.x;
         const maxX = last.x + getW(last);
         const totalSpan = maxX - minX;
-        
+
         // 全ノードの幅の合計を計算
         let totalNodeWidth = 0;
         targets.forEach(n => totalNodeWidth += getW(n));
-        
+
         // 隙間に使えるスペースの合計
         const totalGap = totalSpan - totalNodeWidth;
-        
+
         // 1箇所あたりの隙間（ノード数 - 1 で割る）
         const gap = totalGap / (targets.length - 1);
-        
+
         // 配置適用
         let currentX = minX;
         targets.forEach(node => {
@@ -5535,7 +5817,7 @@ function alignSelectedNodes(type) {
     // 選択状態の見た目を維持
     targets.forEach(t => {
         const el = document.getElementById(t.id);
-        if(el) el.classList.add('selected');
+        if (el) el.classList.add('selected');
     });
     recordHistory();
 }
@@ -5547,15 +5829,15 @@ function getClosestPointOnSegment(p, a, b) {
     const atob = { x: b.x - a.x, y: b.y - a.y };
     const atop = { x: p.x - a.x, y: p.y - a.y };
     const len2 = atob.x * atob.x + atob.y * atob.y;
-    
+
     let t = 0;
     if (len2 !== 0) {
         t = (atop.x * atob.x + atop.y * atob.y) / len2;
     }
-    
+
     // 線分の範囲内(0〜1)に収める
     t = Math.max(0, Math.min(1, t));
-    
+
     return {
         x: a.x + atob.x * t,
         y: a.y + atob.y * t,
@@ -5578,17 +5860,17 @@ function getClosestConnectionPoint(x, y, excludeId = null) {
 
         for (let i = 0; i < points.length - 1; i++) {
             const a = points[i];
-            const b = points[i+1];
-            
+            const b = points[i + 1];
+
             // 計算実行
-            const closest = getClosestPointOnSegment({x, y}, a, b);
+            const closest = getClosestPointOnSegment({ x, y }, a, b);
             const dist = Math.hypot(x - closest.x, y - closest.y);
 
             if (dist < minDist) {
                 minDist = dist;
-                bestPoint = { 
-                    x: closest.x, 
-                    y: closest.y, 
+                bestPoint = {
+                    x: closest.x,
+                    y: closest.y,
                     connId: conn.id,
                     segmentVector: closest.vector // 垂直ロック用
                 };
@@ -5608,19 +5890,19 @@ window.addEventListener('mousemove', (e) => {
 
     // ターゲットが背景、またはSVG内の要素である場合
     // (connection-hit-area の上に来た時を検知したい)
-    
+
     // ヒットエリア（透明な太い線）の上か？
     if (e.target.classList.contains('connection-hit-area')) {
         // 親（矢印）が選択されているかチェックしたいけど、DOMからはIDがすぐに取れないかも？
         // でも handleLineMouseDown で制御してるから、見た目だけ十字になればOK！
-        
+
         // ただし、選択中の線の上では「移動」カーソルにしたいよね。
         // ここはCSS(:hover)と競合するけど、JSで計算して強制上書きするわ。
-        
+
         const pos = getPointerPos(e);
         const worldX = (pos.x - viewport.x) / viewport.scale;
         const worldY = (pos.y - viewport.y) / viewport.scale;
-        
+
         const hit = getClosestConnectionPoint(worldX, worldY);
         if (hit) {
             const isSelected = selectedConnIds.has(hit.connId) || selectedConnId === hit.connId;

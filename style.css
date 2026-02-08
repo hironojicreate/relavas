@@ -1473,3 +1473,24 @@ body.drawing-mode * {
     background-color: #f0f7ff;
     color: #007bff;
 }
+
+/* ====== グループ化機能用スタイル ====== */
+
+/* グループノード（親） */
+.node.group-node {
+    /* デフォルトは点線 */
+    border-style: dashed;
+    /* 背景は基本透明（JSで制御するけど初期値として） */
+    background-color: rgba(255, 255, 255, 0.5); 
+    /* 重なり順は一番下 */
+    z-index: 5; 
+}
+
+/* ★ここから追加：親が選ばれたときの子要素用スタイル */
+.node.child-selected {
+    /* !important をつけて、インラインスタイルの box-shadow: none を強制上書きするの！ */
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3), 0 0 12px rgba(0, 123, 255, 0.4) !important;
+    transition: box-shadow 0.2s;
+    /* ついでにz-indexも少し上げておくと、他のノードに埋もれにくくなるかも？ */
+    z-index: 11; 
+}

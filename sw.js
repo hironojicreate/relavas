@@ -1,5 +1,5 @@
 // sw.js
-const CACHE_NAME = 'relavas-v3';
+const CACHE_NAME = 'relavas-v4';
 const ASSETS = [
     './',
     './index.html',
