@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RelaVas v1.4 - 相関図作成 -</title>
+    <title>RelaVas v1.5 - 相関図作成 -</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="RelaVasIco.png" type="image/png">
     <link rel="apple-touch-icon" href="RelaVasIco.png">
@@ -264,9 +264,29 @@
                     </div>
                 </div>
 
+                <div id="section-align-group" style="display:none; border-top: 1px solid #eee; margin-top: 10px; padding-top: 10px;">
+                    <label class="menu-label" style="text-align:left; width:auto; margin-bottom:5px;">整列・グループ</label>
+                    
+                    <div class="toggle-group" style="width:100%; margin-bottom: 4px;">
+                        <button class="btn-align" data-type="left" title="左揃え">┣</button>
+                        <button class="btn-align" data-type="center-h" title="左右中央">┃</button>
+                        <button class="btn-align" data-type="right" title="右揃え">┫</button>
+                        <button class="btn-align" data-type="dist-h" title="横に等間隔">|||</button>
+                    </div>
+
+                    <div class="toggle-group" style="width:100%; margin-bottom: 6px;">
+                        <button class="btn-align" data-type="top" title="上揃え">┳</button>
+                        <button class="btn-align" data-type="center-v" title="上下中央">━</button>
+                        <button class="btn-align" data-type="bottom" title="下揃え">┻</button>
+                        <button class="btn-align" data-type="dist-v" title="縦に等間隔">☰</button>
+                    </div>
+
+                    <button id="btn-group-make" class="tool-btn" style="width:100%; justify-content:center;">🔗 グループ化</button>
+                </div>
                 <div class="menu-actions" style="margin-top:10px;">
-                    <button id="btn-group-ungroup" class="tool-btn"
-                        style="width:100%; justify-content:center; display:none;">🔓 グループ解除</button>
+                    <button id="btn-group-ungroup" class="tool-btn" style="width:100%; justify-content:center; display:none;">🔓 グループ解除</button>
+
+
                     <button id="btn-menu-delete" class="btn-danger">🗑️ 削除</button>
                 </div>
             </div>
@@ -337,29 +357,6 @@
                     <button id="btn-conn-delete" class="btn-danger">🗑️ この線を削除</button>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <div id="align-menu" style="display: none;">
-        <div class="menu-section"
-            style="margin: 0; padding: 10px; flex-direction: column; align-items: stretch; gap: 8px;">
-            <label class="menu-label" style="text-align:left; width:auto; margin-bottom:5px;">整列・配置</label>
-
-            <div class="toggle-group" style="width:100%; margin-bottom: 4px;">
-                <button class="btn-align" data-type="left" title="左揃え">┣</button>
-                <button class="btn-align" data-type="center-h" title="左右中央">┃</button>
-                <button class="btn-align" data-type="right" title="右揃え">┫</button>
-                <button class="btn-align" data-type="dist-h" title="横に等間隔">|||</button>
-            </div>
-
-            <div class="toggle-group" style="width:100%;">
-                <button class="btn-align" data-type="top" title="上揃え">┳</button>
-                <button class="btn-align" data-type="center-v" title="上下中央">━</button>
-                <button class="btn-align" data-type="bottom" title="下揃え">┻</button>
-                <button class="btn-align" data-type="dist-v" title="縦に等間隔">☰</button>
-            </div>
-            <hr class="menu-hr" style="margin: 6px 0;">
-            <button id="btn-group-make" class="tool-btn" style="width:100%; justify-content:center;">🔗 グループ化</button>
         </div>
     </div>
 

@@ -369,21 +369,17 @@ function createNodeElement(nodeData) {
         e.preventDefault();
         e.stopPropagation(); // 背景のイベントを止める
 
-        // ★★★ ここを書き換え！分岐処理 ★★★
-
         // ケース1: 既にこれが「複数選択の一部」として選ばれている場合
         if (selectedNodeIds.has(nodeData.id) && selectedNodeIds.size >= 2) {
-            // 選択は維持したまま、整列メニューを開く！
-            openAlignMenu(e.clientX, e.clientY);
+            // 選択を維持したままメニューを開く
+            // (editingNodeId にはこのノードを設定して、代表として値を表示させる)
+            openContextMenu(nodeData, 'node', e.clientX, e.clientY);
         }
         // ケース2: 単一選択、あるいは未選択の状態
         else {
-            // これだけを選択して、通常のプロパティメニューを開く
+            // これだけを選択してメニューを開く
             selectNode(nodeData.id);
             openContextMenu(nodeData, 'node', e.clientX, e.clientY);
-
-            // もし整列メニューが開いてたら閉じる
-            closeAlignMenu();
         }
     });
 
@@ -469,7 +465,7 @@ function updateGroupChildSelection() {
     // 2. 現在選択されているノードの中に「グループ（親）」があるかチェック
     selectedNodeIds.forEach(parentId => {
         const parentNode = nodes.find(n => n.id === parentId);
-        
+
         // もしこれがグループなら、その子供たちを探す
         if (parentNode && parentNode.type === 'group') {
             nodes.forEach(child => {
@@ -953,7 +949,7 @@ function drawConnection(conn, updatedIds) {
     const visualWidth = isDouble ? w * 3 : w;
     const arrowBaseSize = 12 + (visualWidth * 0.5); // 少し調整
     const arrowLen = arrowBaseSize * 1.3;
-    
+
     // 矢印マーカーのサイズに合わせて隙間を調整
     const gapSize = arrowLen + 4;
     const marginSize = 6;
@@ -981,7 +977,7 @@ function drawConnection(conn, updatedIds) {
 
     // 3. マーカー定義
     const isSelected = (conn.id === selectedConnId || selectedConnIds.has(conn.id));
-    const markerColor = isSelected ? '#007bff' : (style.color || '#555');
+    const markerColor = style.color || '#555';
     const markerEndId = `marker-end-${conn.id}`;
     const markerStartId = `marker-start-${conn.id}`;
 
@@ -1005,7 +1001,7 @@ function drawConnection(conn, updatedIds) {
         }
         marker.setAttribute("markerWidth", arrowLen + 2);
         marker.setAttribute("markerHeight", arrowBaseSize);
-        
+
         const path = marker.querySelector('path');
         path.setAttribute("fill", markerColor);
 
@@ -1033,8 +1029,18 @@ function drawConnection(conn, updatedIds) {
     hitPath.onmousedown = (e) => handleLineMouseDown(e, conn);
     hitPath.addEventListener('contextmenu', (e) => {
         e.preventDefault(); e.stopPropagation();
-        selectConnection(conn.id);
-        openContextMenu(conn, 'connection', e.clientX, e.clientY);
+        // ケース1: 既にこれが「複数選択の一部」として選ばれている場合
+        if (selectedConnIds.has(conn.id) && selectedConnIds.size >= 2) {
+             // 選択を維持したままメニューを開く
+             // (editingConnId にはこの矢印を設定して、代表として値を表示させる)
+             openContextMenu(conn, 'connection', e.clientX, e.clientY);
+        }
+        // ケース2: 単一選択、あるいは未選択の状態
+        else {
+            // これだけを選択してメニューを開く
+            selectConnection(conn.id);
+            openContextMenu(conn, 'connection', e.clientX, e.clientY);
+        }
     });
     svgLayer.appendChild(hitPath);
 
@@ -1050,14 +1056,36 @@ function drawConnection(conn, updatedIds) {
         circle.onmousedown = (e) => handleLineMouseDown(e, conn);
         circle.addEventListener('contextmenu', (e) => {
             e.preventDefault(); e.stopPropagation();
-            selectConnection(conn.id);
-            openContextMenu(conn, 'connection', e.clientX, e.clientY);
+
+            if (selectedConnIds.has(conn.id) && selectedConnIds.size >= 2) {
+                 openContextMenu(conn, 'connection', e.clientX, e.clientY);
+            } else {
+                selectConnection(conn.id);
+                openContextMenu(conn, 'connection', e.clientX, e.clientY);
+            }
         });
         svgLayer.appendChild(circle);
     };
     if (style.arrow === 'start' || style.arrow === 'both') createHitCircle(startPos);
     if (style.arrow === 'end' || style.arrow === 'both') createHitCircle(endPos);
 
+    if (isSelected) {
+        const highlightPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        highlightPath.setAttribute("d", d);
+        highlightPath.setAttribute("class", "connection-highlight");
+        highlightPath.style.pointerEvents = "none"; // クリックは邪魔しない
+        
+        // 青い太線（半透明）
+        highlightPath.style.stroke = "#007bff";
+        // 本体の線(w)より少し太くする (最低6px、太さに応じて+4px)
+        highlightPath.style.strokeWidth = Math.max(6, w + 4); 
+        highlightPath.style.strokeOpacity = "0.2"; // 半分透けさせる
+        highlightPath.style.fill = "none";
+        highlightPath.style.strokeLinecap = "round";
+        highlightPath.style.strokeLinejoin = "round";
+        
+        svgLayer.appendChild(highlightPath);
+    }
 
     // 5. ★★★ 見た目用の線（ここを書き換え！） ★★★
 
@@ -1068,7 +1096,7 @@ function drawConnection(conn, updatedIds) {
         outerPath.setAttribute("d", d);
         outerPath.setAttribute("class", "connection-line-outer");
         outerPath.style.pointerEvents = "none";
-        outerPath.style.stroke = isSelected ? '#007bff' : style.color;
+        outerPath.style.stroke = style.color;
         outerPath.style.strokeWidth = w * 3; // 3倍の太さ
         outerPath.style.fill = "none";
         // 矢印はこっちにつける
@@ -1079,7 +1107,7 @@ function drawConnection(conn, updatedIds) {
         // ② 上に乗せる細い線（背景色！）
         // ★ここでアプリの背景色を取得して使うの！
         const bgColor = appSettings.backgroundColor || '#f0f2f5';
-        
+
         const innerPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
         innerPath.setAttribute("d", d);
         innerPath.setAttribute("class", "connection-line-inner");
@@ -1095,7 +1123,7 @@ function drawConnection(conn, updatedIds) {
         visualPath.setAttribute("d", d);
         visualPath.setAttribute("class", "connection-line");
         visualPath.style.pointerEvents = "none";
-        visualPath.style.stroke = isSelected ? '#007bff' : style.color;
+        visualPath.style.stroke = style.color;
         visualPath.style.strokeWidth = w;
         visualPath.style.fill = "none";
 
@@ -1107,7 +1135,7 @@ function drawConnection(conn, updatedIds) {
 
         if (style.arrow === 'end' || style.arrow === 'both') visualPath.setAttribute("marker-end", `url(#${markerEndId})`);
         if (style.arrow === 'start' || style.arrow === 'both') visualPath.setAttribute("marker-start", `url(#${markerStartId})`);
-        
+
         svgLayer.appendChild(visualPath);
     }
 
@@ -1234,13 +1262,20 @@ function createOrUpdateHandle(conn, type, pos, updatedIds) {
         // タッチしやすくするCSS擬似要素のためにクラスはそのままでOK
 
         registerInteraction(el, { type: 'handle', connId: conn.id, handleType: type });
-        el.addEventListener('contextmenu', (e) => {
-            e.preventDefault(); // 標準メニューを出さない
-            e.stopPropagation(); // 後ろのキャンバスに反応させない
 
-            // この線を選択状態にして、メニューを開く
-            selectConnection(conn.id);
-            openContextMenu(conn, 'connection', e.clientX, e.clientY);
+        el.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); 
+            e.stopPropagation();
+
+            // 複数選択中なら、それを崩さないようにするわ！
+            if (selectedConnIds.has(conn.id) && selectedConnIds.size >= 2) {
+                // 選択維持！
+                openContextMenu(conn, 'connection', e.clientX, e.clientY);
+            } else {
+                // 単体選択
+                selectConnection(conn.id);
+                openContextMenu(conn, 'connection', e.clientX, e.clientY);
+            }
         });
         container.appendChild(el);
     }
@@ -1276,11 +1311,16 @@ function createOrUpdateWaypoint(conn, index, pos, updatedIds) {
         registerInteraction(el, { type: 'waypoint', connId: conn.id, index: index });
 
         el.addEventListener('contextmenu', (e) => {
-            e.preventDefault(); // 標準メニューを出さない
+            e.preventDefault(); 
             e.stopPropagation();
 
-            selectConnection(conn.id);
-            openContextMenu(conn, 'connection', e.clientX, e.clientY);
+            // ここでも複数選択をチェック！
+            if (selectedConnIds.has(conn.id) && selectedConnIds.size >= 2) {
+                openContextMenu(conn, 'connection', e.clientX, e.clientY);
+            } else {
+                selectConnection(conn.id);
+                openContextMenu(conn, 'connection', e.clientX, e.clientY);
+            }
         });
 
         // ダブルクリック削除
@@ -1831,6 +1871,15 @@ function openContextMenu(targetData, type, mouseX, mouseY) {
         tabNav.classList.remove('tab-hidden'); // タブ表示
         previewBox.style.display = 'flex';
 
+        const alignSection = document.getElementById('section-align-group');
+        if (alignSection) {
+            if (selectedNodeIds.size >= 2) {
+                alignSection.style.display = 'block';
+            } else {
+                alignSection.style.display = 'none';
+            }
+        }
+
         // データを全注入！
         const s = targetData.style || {};
         const t = targetData.text || {};
@@ -1892,7 +1941,6 @@ function openContextMenu(targetData, type, mouseX, mouseY) {
 
         // プレビュー更新
         updatePreview(targetData);
-        selectNode(targetData.id);
 
         // グループ解除ボタンの表示制御
         const btnUngroup = document.getElementById('btn-group-ungroup');
@@ -1936,7 +1984,7 @@ function openContextMenu(targetData, type, mouseX, mouseY) {
         else btnBold.classList.remove('active');
 
         updateConnPreview(targetData);
-        selectConnection(targetData.id);
+
     }
 
     // メニュー位置（共通）
@@ -2052,22 +2100,29 @@ document.getElementById('btn-conn-delete').addEventListener('click', () => {
 
 // ★汎用更新ヘルパー関数
 // (いちいち node.style = {} とか書くのが大変だから作ったの！)
+
 function updateNodeProperty(category, key, value) {
-    if (!editingNodeId) return;
-    const node = nodes.find(n => n.id === editingNodeId);
-    if (node) {
-        // カテゴリ（styleやtext）がなければ作る
-        if (!node[category]) node[category] = {};
+    // ターゲットを決める（複数選択なら全員、そうでなければ編集中のやつ）
+    const targets = new Set(selectedNodeIds);
+    if (editingNodeId) targets.add(editingNodeId);
 
-        // ★ここが重要！
-        // category全体をイコールで書き換えるんじゃなくて、
-        // その中の key（fontSizeなど）だけを更新するの。
-        node[category][key] = value;
+    if (targets.size === 0) return;
 
-        refreshNodeStyle(node);
-        updatePreview(node);
-        render();
-    }
+    targets.forEach(id => {
+        const node = nodes.find(n => n.id === id);
+        if (node) {
+            if (!node[category]) node[category] = {};
+            node[category][key] = value;
+
+            refreshNodeStyle(node);
+            
+            // もしこれが「代表ノード（編集中）」ならプレビューも更新
+            if (id === editingNodeId) updatePreview(node);
+        }
+    });
+
+    render(); // 線の位置などが変わるかもしれないので再描画
+    // (recordHistoryは呼び出し元で行うルールならここでは不要だけど、トグルボタン等からの呼び出しを一元化するならここで呼んでもいいわ。今回は呼び出し元が呼んでるのでOK)
 }
 
 // ヘルパー関数：パレットの見た目更新（線・人物共通 ロジック統一版）
@@ -2132,70 +2187,95 @@ function movePointTowards(p1, p2, distance) {
 }
 
 // ====== スタイル適用ロジック ======
-// ★線プロパティ更新ヘルパー
+// ★線プロパティ更新ヘルパー（一括適用対応版）
 function updateConnProperty(category, key, value) {
-    if (!editingConnId) return;
-    const conn = connections.find(c => c.id === editingConnId);
-    if (conn) {
-        if (!conn[category]) conn[category] = {};
-        conn[category][key] = value;
+    // ターゲットは「選択中の矢印全部」＋「今右クリックした矢印」
+    const targets = new Set(selectedConnIds);
+    if (editingConnId) targets.add(editingConnId);
 
-        // 画面とプレビュー更新
-        render();
-        updateConnPreview(conn);
-    }
+    if (targets.size === 0) return;
+
+    targets.forEach(id => {
+        const conn = connections.find(c => c.id === id);
+        if (conn) {
+            if (!conn[category]) conn[category] = {};
+            conn[category][key] = value;
+
+            // もしこれが「代表（編集中）」の矢印なら、プレビュー画面も更新する
+            if (id === editingConnId) {
+                updateConnPreview(conn);
+            }
+        }
+    });
+
+    // 全体の再描画（太さなどが変わるため）
+    render();
 }
 
-
 // ====== カラー適用関数（統合版） ======
+
 function applyColor(target, color) {
-    // 1. ノード（人物・ボックス統合）
+    // 1. ノード（人物・ボックス）
     if (['bg', 'border', 'text', 'text-bg'].includes(target)) {
-        if (!editingNodeId) return;
-        const node = nodes.find(n => n.id === editingNodeId);
-        if (!node) return;
+        
+        const targets = new Set(selectedNodeIds);
+        if (editingNodeId) targets.add(editingNodeId);
 
-        if (target === 'bg') {
-            if (!node.style) node.style = {};
-            node.style.backgroundColor = color;
-            updatePaletteActiveState('palette-bg', color);
-        } else if (target === 'border') {
-            if (!node.style) node.style = {};
-            node.style.borderColor = color;
-            updatePaletteActiveState('palette-border', color);
-        } else if (target === 'text') {
-            if (!node.text) node.text = {};
-            node.text.color = color;
-            updatePaletteActiveState('palette-text', color);
-        } else if (target === 'text-bg') {
-            if (!node.text) node.text = {};
-            node.text.bgColor = color;
-            updatePaletteActiveState('palette-text-bg', color);
-        }
-        refreshNodeStyle(node);
+        if (targets.size === 0) return;
+
+        targets.forEach(id => {
+            const node = nodes.find(n => n.id === id);
+            if (!node) return;
+
+            if (target === 'bg') {
+                if (!node.style) node.style = {};
+                node.style.backgroundColor = color;
+                // 代表ノードならパレットの状態を更新
+                if (id === editingNodeId) updatePaletteActiveState('palette-bg', color);
+            } else if (target === 'border') {
+                if (!node.style) node.style = {};
+                node.style.borderColor = color;
+                if (id === editingNodeId) updatePaletteActiveState('palette-border', color);
+            } else if (target === 'text') {
+                if (!node.text) node.text = {};
+                node.text.color = color;
+                if (id === editingNodeId) updatePaletteActiveState('palette-text', color);
+            } else if (target === 'text-bg') {
+                if (!node.text) node.text = {};
+                node.text.bgColor = color;
+                if (id === editingNodeId) updatePaletteActiveState('palette-text-bg', color);
+            }
+            refreshNodeStyle(node);
+        });
+        
     }
-    // 2. 矢印
+    // 2. 矢印（一括適用対応）
     else {
-        // （矢印の処理は変更なし、既存のままでOK）
-        if (!editingConnId) return;
-        const conn = connections.find(c => c.id === editingConnId);
-        if (!conn) return;
+        // 矢印も複数選択に対応させるわ！
+        const targets = new Set(selectedConnIds);
+        if (editingConnId) targets.add(editingConnId);
+        
+        targets.forEach(id => {
+            const conn = connections.find(c => c.id === id);
+            if (!conn) return;
 
-        if (target === 'conn-stroke') {
-            if (!conn.style) conn.style = {};
-            conn.style.color = color;
-            updatePaletteActiveState('palette-conn-stroke', color);
-        } else if (target === 'conn-text') {
-            if (!conn.label) conn.label = {};
-            conn.label.color = color;
-            updatePaletteActiveState('palette-conn-text', color);
-        } else if (target === 'conn-bg') {
-            if (!conn.label) conn.label = {};
-            conn.label.bgColor = color;
-            updatePaletteActiveState('palette-conn-bg', color);
-        }
-        render();
-        updateConnPreview(conn);
+            if (target === 'conn-stroke') {
+                if (!conn.style) conn.style = {};
+                conn.style.color = color;
+                if (id === editingConnId) updatePaletteActiveState('palette-conn-stroke', color);
+            } else if (target === 'conn-text') {
+                if (!conn.label) conn.label = {};
+                conn.label.color = color;
+                if (id === editingConnId) updatePaletteActiveState('palette-conn-text', color);
+            } else if (target === 'conn-bg') {
+                if (!conn.label) conn.label = {};
+                conn.label.bgColor = color;
+                if (id === editingConnId) updatePaletteActiveState('palette-conn-bg', color);
+            }
+            if (id === editingConnId) updateConnPreview(conn);
+        });
+        
+        render(); // 全体更新
     }
     recordHistory();
 }
@@ -2338,28 +2418,28 @@ function updateConnPreview(conn) {
         // === 二重線モード ===
         // アプリの背景色を取得（これで透けてるように見せる！）
         const bgColor = appSettings.backgroundColor || '#f0f2f5';
-        
+
         // 1. 下の線（太い線・線の色）
         line.setAttribute("d", d);
         line.setAttribute("stroke", s.color || '#555');
         line.setAttribute("stroke-width", w * 3); // 3倍の太さ
         line.setAttribute("fill", "none");
-        
+
         // 2. 上の線（細い線・背景色で中抜き）
         previewInnerLine.style.display = 'block';
         previewInnerLine.setAttribute("d", d);
         previewInnerLine.setAttribute("stroke", bgColor); // ここがミソ！
         previewInnerLine.setAttribute("stroke-width", w); // 元の太さ
         previewInnerLine.setAttribute("fill", "none");
-        
+
         // 内側の線には矢印をつけない
         previewInnerLine.setAttribute("marker-end", "");
         previewInnerLine.setAttribute("marker-start", "");
-        
+
     } else {
         // === 通常モード（実線・破線） ===
         previewInnerLine.style.display = 'none'; // 内側の線は隠す
-        
+
         line.setAttribute("d", d);
         line.setAttribute("stroke", s.color || '#555');
         line.setAttribute("stroke-width", w);
@@ -2589,22 +2669,26 @@ function updateConnPreview(conn) {
 
 // シャドウ適用ヘルパー（ID修正版）
 function applyShadow(target, val) {
-    if (!editingNodeId) return;
-    const node = nodes.find(n => n.id === editingNodeId);
-    if (!node) return;
+    const targets = new Set(selectedNodeIds);
+    if (editingNodeId) targets.add(editingNodeId);
 
-    if (target === 'box') {
-        if (!node.style) node.style = {};
-        node.style.boxShadow = val;
-    } else {
-        if (!node.text) node.text = {};
-        node.text.shadow = val;
-    }
+    if (targets.size === 0) return;
 
-    // 見た目更新
-    refreshNodeStyle(node);
+    targets.forEach(id => {
+        const node = nodes.find(n => n.id === id);
+        if (!node) return;
 
-    // ★ここを新しいIDに修正！
+        if (target === 'box') {
+            if (!node.style) node.style = {};
+            node.style.boxShadow = val;
+        } else {
+            if (!node.text) node.text = {};
+            node.text.shadow = val;
+        }
+        refreshNodeStyle(node);
+    });
+
+    // 代表ノードの状態に合わせてボタンを光らせる
     updateToggleActiveState(target === 'box' ? 'toggle-box-shadow' : 'toggle-text-shadow', val);
 }
 
@@ -3460,7 +3544,7 @@ function handlePointerDown(e, info) {
                 const isAlreadySelected = (selectedId === clickedNode.id) || selectedNodeIds.has(clickedNode.id);
 
                 if (isCtrl || isDoubleClick || isAlreadySelected) {
-                     targetId = clickedNode.id; // 子を選択（維持）
+                    targetId = clickedNode.id; // 子を選択（維持）
                 }
 
                 targetIdToSelect = targetId;
@@ -3474,7 +3558,7 @@ function handlePointerDown(e, info) {
             // 強制的に「実際にクリックしたノード（clickedNode.id）」を使うように書き換えるわ。
             // これで、グループ内でもちゃんと「子」から線が引けるようになるわよ。
             const drawSourceId = clickedNode ? clickedNode.id : targetInfo.id;
-            startDrawingLine(e, drawSourceId); 
+            startDrawingLine(e, drawSourceId);
             return;
         }
 
@@ -3687,7 +3771,7 @@ function handleLineMouseDown(e, conn) {
 
             if (!hasDragStarted) {
                 const dist = Math.hypot(pos.x - dragStartRawPos.x, pos.y - dragStartRawPos.y);
-                if (dist < 10) { 
+                if (dist < 10) {
                     return; // まだ動かない
                 }
                 hasDragStarted = true; // 移動モード解禁！
@@ -5070,7 +5154,7 @@ document.getElementById('btn-save').addEventListener('click', () => {
     const currentTitle = appSettings.title || '人物相関図';
 
     const saveData = {
-        version: "1.4",
+        version: "1.5",
         timestamp: new Date().toISOString(),
         appSettings: appSettings,
         nodes: nodes,
@@ -5680,7 +5764,7 @@ window.addEventListener('mouseup', (e) => {
 // ====== 整列メニュー制御 ======
 
 const alignMenu = document.getElementById('align-menu');
-
+/*
 // 整列メニューを開く関数
 function openAlignMenu(x, y) {
     // 既存メニューは閉じる
@@ -5703,10 +5787,11 @@ function openAlignMenu(x, y) {
     alignMenu.style.top = posY + 'px';
     alignMenu.style.display = 'block';
 }
+*/
 
 // 整列メニューを閉じる関数
 function closeAlignMenu() {
-    alignMenu.style.display = 'none';
+    // alignMenu.style.display = 'none';
 }
 
 // ボタンイベント登録
@@ -5937,9 +6022,13 @@ recordHistory();
 /*
 バージョン書き換えメモ
 
-document.getElementById('btn-save').addEventListener('click', () => {
+// document.getElementById('btn-save').addEventListener('click', () => {
 という、保存ボタン内のバージョン。
 
 HTMLのヘッダーのバージョン。
+
+// sw.js
+const CACHE_NAME = 'relavas-v1.5';
+
 
 */

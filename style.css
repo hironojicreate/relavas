@@ -488,11 +488,15 @@ html {
 
 /* 選択されたノードのスタイル（青枠で強調） */
 .node.selected {
-    border-color: #007bff !important;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3);
-    background-color: #f0f7ff;
+    /* 変更点：
+       1. 0 0 0 2px #fff  → 内側の白い隙間（これはキープして見やすく）
+       2. 0 0 0 4px rgba(0, 123, 255, 0.3) → 外側の線を「半透明」にして主張を抑える
+       3. 0 0 10px rgba(...) → ぼかしも少し弱める
+    */
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(0, 123, 255, 0.3), 0 0 8px rgba(0, 123, 255, 0.2) !important;
+    
+    z-index: 100;
 }
-
 
 /* ====== コンテキストメニュー（プロパティ設定パネル） ====== */
 #context-menu {
