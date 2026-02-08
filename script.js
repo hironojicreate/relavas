@@ -1477,10 +1477,14 @@ document.getElementById('btn-add-box').addEventListener('click', () => {
 });
 
 // 削除ボタン（道連れなし・切り離し対応版）
-document.getElementById('btn-delete').addEventListener('click', () => {
+
+// ====== 削除機能（共通化＆ショートカット対応） ======
+
+// 1. 削除処理を実行する共通関数
+function deleteSelectedItems() {
     let hasChanges = false;
 
-    // 1. 削除対象のリストを作成
+    // A. 削除対象のリストを作成
     const nodesToDelete = new Set(selectedNodeIds);
     if (selectedId) nodesToDelete.add(selectedId);
 
@@ -1490,7 +1494,7 @@ document.getElementById('btn-delete').addEventListener('click', () => {
     // 何も選ばれてなければ終了
     if (nodesToDelete.size === 0 && connsToDelete.size === 0) return;
 
-    // 2. 生き残る線のために「切り離し処理」を行う
+    // B. 生き残る線のために「切り離し処理」を行う
     // （ノードが消えるなら、その位置で座標固定の線に変身させるの！）
     connections.forEach(conn => {
         // もしこの線自体が削除対象なら、何もしない（後で消えるから）
@@ -1513,7 +1517,7 @@ document.getElementById('btn-delete').addEventListener('click', () => {
         }
     });
 
-    // 3. 実際の削除処理
+    // C. 実際の削除処理
 
     // ノード削除
     if (nodesToDelete.size > 0) {
@@ -1529,7 +1533,7 @@ document.getElementById('btn-delete').addEventListener('click', () => {
         if (connections.length !== beforeCount) hasChanges = true;
     }
 
-    // 4. 更新処理
+    // D. 更新処理
     if (hasChanges) {
         // 選択解除
         selectedNodeIds.clear();
@@ -1540,10 +1544,30 @@ document.getElementById('btn-delete').addEventListener('click', () => {
         document.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
 
         refreshScreen();
+        
+        // もしコンテキストメニューが開いていたら閉じる
         closeContextMenu();
+        
         recordHistory();
     }
+}
+
+// 2. ツールバーの削除ボタンイベント
+document.getElementById('btn-delete').addEventListener('click', deleteSelectedItems);
+
+// 3. キーボードショートカット（Delete / Backspace）
+window.addEventListener('keydown', (e) => {
+    // 入力欄にいるときは無視（誤爆防止の鉄則！）
+    // isComposing は日本語変換中かどうかの判定よ。変換中に消えたら困るものね！
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.isComposing) return;
+
+    // Delete または Backspace
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault(); // ブラウザの「戻る」動作などを防ぐ
+        deleteSelectedItems();
+    }
 });
+
 
 // ====== ガイド切り替え機能（新規追加） ======
 const btnToggleGuide = document.getElementById('btn-toggle-guide');
@@ -4357,22 +4381,36 @@ function updateHistoryButtons() {
 document.getElementById('btn-undo').addEventListener('click', executeUndo);
 document.getElementById('btn-redo').addEventListener('click', executeRedo);
 
-// キーボードショートカット (Ctrl+Z / Ctrl+Y)
+// ====== Undo / Redo ショートカット (OS標準対応版) ======
 window.addEventListener('keydown', (e) => {
-    // 入力欄にいるときは発動しない
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    // 入力欄や日本語変換中(isComposing)は無視するの！
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.isComposing) return;
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    // Ctrlキー または Commandキー(Mac) が押されているか確認
+    const hasModifier = (e.ctrlKey || e.metaKey);
+
+    if (!hasModifier) return;
+
+    // 小文字に変換して判定（Zとzの揺らぎを吸収）
+    const key = e.key.toLowerCase();
+
+    // --- Undo (元に戻す) ---
+    // 条件: (Ctrl/Cmd) + Z (Shiftなし！)
+    if (key === 'z' && !e.shiftKey) {
         e.preventDefault();
         executeUndo();
     }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { // MacはShift+Cmd+Zも一般的
+
+    // --- Redo (やり直し) ---
+    // パターン1: (Ctrl/Cmd) + Y  (Windowsの標準)
+    // パターン2: (Ctrl/Cmd) + Shift + Z (Macの標準、Winでも使えるツール多し)
+    if (key === 'y' || (key === 'z' && e.shiftKey)) {
         e.preventDefault();
         executeRedo();
     }
 });
 
-// ★追加：ビューポートを更新する関数
+// ビューポートを更新する関数
 function updateViewport() {
     // world-layer 全体を動かす＆拡大縮小する魔法
     // transform-origin は CSS で 0 0 に設定済みなので、左上基準で変形してから移動する計算になるわ
