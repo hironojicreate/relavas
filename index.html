@@ -265,7 +265,8 @@
                 </div>
 
                 <div class="menu-actions" style="margin-top:10px;">
-                    <button id="btn-group-ungroup" class="tool-btn" style="width:100%; justify-content:center; display:none;">🔓 グループ解除</button>
+                    <button id="btn-group-ungroup" class="tool-btn"
+                        style="width:100%; justify-content:center; display:none;">🔓 グループ解除</button>
                     <button id="btn-menu-delete" class="btn-danger">🗑️ 削除</button>
                 </div>
             </div>
@@ -289,9 +290,13 @@
                                     data-val="4">中</button><button data-val="6">太</button></div>
                         </div>
                     </div>
+
                     <div class="menu-section"><label class="menu-label">線種</label>
-                        <div class="toggle-group" id="toggle-conn-dash" style="width: 100%;"><button data-val="solid"
-                                style="flex:1;">実線</button><button data-val="dashed" style="flex:1;">破線</button></div>
+                        <div class="toggle-group" id="toggle-conn-dash" style="width: 100%;">
+                            <button data-val="solid" style="flex:1;">実線</button>
+                            <button data-val="dashed" style="flex:1;">破線</button>
+                            <button data-val="double" style="flex:1;">二重</button>
+                        </div>
                     </div>
                     <div class="menu-section"><label class="menu-label">線の色</label>
                         <div id="palette-conn-stroke" class="color-palette"></div>
@@ -362,7 +367,6 @@
 
     <script src="script.js"></script>
 
-    
 
     <script>
         if ('serviceWorker' in navigator) {

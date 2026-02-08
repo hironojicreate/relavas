@@ -934,9 +934,8 @@ function render() {
 
 
 // 線を描画する関数
-// drawConnection 関数（矢印ヒット判定修正版）
 function drawConnection(conn, updatedIds) {
-    // 1. 基本座標
+    // 1. 基本座標（変更なし）
     let startPos = (conn.start.type === 'anchor')
         ? getAnchorCoordinate(conn.start.nodeId, conn.start.side, conn.start.index)
         : { x: conn.start.x, y: conn.start.y };
@@ -948,39 +947,31 @@ function drawConnection(conn, updatedIds) {
     // --- スタイル計算 ---
     const style = conn.style || { color: '#555', width: 2, dash: 'solid', arrow: 'none' };
     const w = style.width || 2;
+    const isDouble = (style.dash === 'double');
 
-    // 矢印サイズ計算
-    const arrowBaseSize = 12 + (w * 1.5);
+    // 矢印サイズ計算（二重線の時は太めに）
+    const visualWidth = isDouble ? w * 3 : w;
+    const arrowBaseSize = 12 + (visualWidth * 0.5); // 少し調整
     const arrowLen = arrowBaseSize * 1.3;
-    const gapSize = arrowLen + 6;
+    
+    // 矢印マーカーのサイズに合わせて隙間を調整
+    const gapSize = arrowLen + 4;
     const marginSize = 6;
 
-    // 始点（start）側の調整
-    // 次の点（経由点があればそれ、なければ終点）に向かって隙間を空ける
     const nextPoint = (conn.waypoints.length > 0) ? conn.waypoints[0] : endPos;
 
     if (style.arrow === 'start' || style.arrow === 'both') {
-        // 矢印があるなら、矢印分＋ゆとりを空ける
         startPos = movePointTowards(startPos, nextPoint, gapSize);
     } else {
-        // 接続先が「アンカー（ノード）」の時だけ隙間を空ける！
-        // 「ポイント（線や空間）」の場合は隙間ゼロ（movePointTowardsしない）でピッタリくっつけるわ
-        if (conn.start.type === 'anchor') {
-            startPos = movePointTowards(startPos, nextPoint, marginSize);
-        }
+        if (conn.start.type === 'anchor') startPos = movePointTowards(startPos, nextPoint, marginSize);
     }
 
-    // 終点（end）側の調整
-    // 前の点（経由点があればそれ、なければ始点）に向かって隙間を空ける
     const prevPoint = (conn.waypoints.length > 0) ? conn.waypoints[conn.waypoints.length - 1] : startPos;
 
     if (style.arrow === 'end' || style.arrow === 'both') {
         endPos = movePointTowards(endPos, prevPoint, gapSize);
     } else {
-        // ここも同じく、アンカーの時だけ隙間を空ける！
-        if (conn.end.type === 'anchor') {
-            endPos = movePointTowards(endPos, prevPoint, marginSize);
-        }
+        if (conn.end.type === 'anchor') endPos = movePointTowards(endPos, prevPoint, marginSize);
     }
 
     // 2. パスデータ
@@ -988,7 +979,7 @@ function drawConnection(conn, updatedIds) {
     conn.waypoints.forEach(wp => { d += ` L ${wp.x} ${wp.y}`; });
     d += ` L ${endPos.x} ${endPos.y}`;
 
-    // 3. マーカー定義（見た目用のみ！）
+    // 3. マーカー定義
     const isSelected = (conn.id === selectedConnId || selectedConnIds.has(conn.id));
     const markerColor = isSelected ? '#007bff' : (style.color || '#555');
     const markerEndId = `marker-end-${conn.id}`;
@@ -1000,124 +991,131 @@ function drawConnection(conn, updatedIds) {
         svgLayer.insertBefore(defs, svgLayer.firstChild);
     }
 
-    // 終点矢印（→）の定義
-    let markerEnd = document.getElementById(markerEndId);
-    if (!markerEnd) {
-        markerEnd = document.createElementNS("http://www.w3.org/2000/svg", "marker");
-        markerEnd.id = markerEndId;
-        markerEnd.setAttribute("markerUnits", "userSpaceOnUse");
-        markerEnd.setAttribute("orient", "auto");
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        markerEnd.appendChild(path);
-        defs.appendChild(markerEnd);
-    }
-    markerEnd.setAttribute("markerWidth", arrowLen + 2);
-    markerEnd.setAttribute("markerHeight", arrowBaseSize);
-    markerEnd.setAttribute("refX", "-1");
-    markerEnd.setAttribute("refY", arrowBaseSize / 2);
-    markerEnd.querySelector('path').setAttribute("d",
-        `M0,0 L0,${arrowBaseSize} L${arrowLen},${arrowBaseSize / 2} z`
-    );
-    markerEnd.querySelector('path').setAttribute("fill", markerColor);
+    // --- マーカー生成 (共通ヘルパー) ---
+    const createMarker = (id, dir) => {
+        let marker = document.getElementById(id);
+        if (!marker) {
+            marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+            marker.id = id;
+            marker.setAttribute("markerUnits", "userSpaceOnUse");
+            marker.setAttribute("orient", "auto");
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            marker.appendChild(path);
+            defs.appendChild(marker);
+        }
+        marker.setAttribute("markerWidth", arrowLen + 2);
+        marker.setAttribute("markerHeight", arrowBaseSize);
+        
+        const path = marker.querySelector('path');
+        path.setAttribute("fill", markerColor);
+
+        if (dir === 'end') {
+            marker.setAttribute("refX", "-1");
+            marker.setAttribute("refY", arrowBaseSize / 2);
+            path.setAttribute("d", `M0,0 L0,${arrowBaseSize} L${arrowLen},${arrowBaseSize / 2} z`);
+        } else {
+            marker.setAttribute("refX", arrowLen + 1);
+            marker.setAttribute("refY", arrowBaseSize / 2);
+            path.setAttribute("d", `M${arrowLen},0 L${arrowLen},${arrowBaseSize} L0,${arrowBaseSize / 2} z`);
+        }
+    };
+
+    createMarker(markerEndId, 'end');
+    createMarker(markerStartId, 'start');
 
 
-    // 始点矢印（←）の定義
-    let markerStart = document.getElementById(markerStartId);
-    if (!markerStart) {
-        markerStart = document.createElementNS("http://www.w3.org/2000/svg", "marker");
-        markerStart.id = markerStartId;
-        markerStart.setAttribute("markerUnits", "userSpaceOnUse");
-        markerStart.setAttribute("orient", "auto");
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        markerStart.appendChild(path);
-        defs.appendChild(markerStart);
-    }
-    markerStart.setAttribute("markerWidth", arrowLen + 2);
-    markerStart.setAttribute("markerHeight", arrowBaseSize);
-    markerStart.setAttribute("refX", arrowLen + 1);
-    markerStart.setAttribute("refY", arrowBaseSize / 2);
-    markerStart.querySelector('path').setAttribute("d",
-        `M${arrowLen},0 L${arrowLen},${arrowBaseSize} L0,${arrowBaseSize / 2} z`
-    );
-    markerStart.querySelector('path').setAttribute("fill", markerColor);
-
-
-    // 4. 透明な当たり判定（hitPath）
-    // ★修正：透明マーカーは廃止！純粋に「太い線」として機能させるわ
+    // 4. 当たり判定（Hit Area）
     const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
     hitPath.setAttribute("d", d);
     hitPath.setAttribute("class", "connection-hit-area");
+    hitPath.style.strokeWidth = Math.max(15, visualWidth + 10);
     hitPath.style.cursor = isSelected ? 'crosshair' : 'pointer';
-
-    // イベント登録
-    // hitPath.onclick = (e) => onLineClick(e, conn);
     hitPath.onmousedown = (e) => handleLineMouseDown(e, conn);
     hitPath.addEventListener('contextmenu', (e) => {
         e.preventDefault(); e.stopPropagation();
         selectConnection(conn.id);
         openContextMenu(conn, 'connection', e.clientX, e.clientY);
     });
-
     svgLayer.appendChild(hitPath);
 
-    // ★★★ ここが新機能！透明な丸を矢印の位置に置く ★★★
+    // ヒットサークル
     const createHitCircle = (pos) => {
         const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         circle.setAttribute("cx", pos.x);
         circle.setAttribute("cy", pos.y);
-        circle.setAttribute("r", 15); // 半径15pxの当たり判定（矢印を十分カバーするわ）
+        circle.setAttribute("r", 15);
         circle.setAttribute("fill", "transparent");
-
-        // CSSでポインターイベントを強制的に有効化！
         circle.style.pointerEvents = "all";
         circle.style.cursor = "pointer";
-
-        // イベントは線と同じものを登録
-        // circle.onclick = (e) => onLineClick(e, conn);
         circle.onmousedown = (e) => handleLineMouseDown(e, conn);
         circle.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             selectConnection(conn.id);
             openContextMenu(conn, 'connection', e.clientX, e.clientY);
         });
-
         svgLayer.appendChild(circle);
     };
-
-    // 矢印がある側にだけ丸を生成
-    if (style.arrow === 'start' || style.arrow === 'both') {
-        createHitCircle(startPos);
-    }
-    if (style.arrow === 'end' || style.arrow === 'both') {
-        createHitCircle(endPos);
-    }
-    // ★★★ ここまで ★★★
+    if (style.arrow === 'start' || style.arrow === 'both') createHitCircle(startPos);
+    if (style.arrow === 'end' || style.arrow === 'both') createHitCircle(endPos);
 
 
-    // 5. 見た目用の線
-    const visualPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    visualPath.setAttribute("d", d);
-    visualPath.setAttribute("class", "connection-line");
-    visualPath.style.pointerEvents = "none";
-    visualPath.style.stroke = isSelected ? '#007bff' : style.color;
-    visualPath.style.strokeWidth = w;
-    if (style.dash === 'dashed') {
-        const dashLen = w * 4;
-        const gapLen = w * 2.5;
-        visualPath.style.strokeDasharray = `${dashLen}, ${gapLen}`;
-    }
-    if (style.arrow === 'end' || style.arrow === 'both') {
-        visualPath.setAttribute("marker-end", `url(#${markerEndId})`);
-    }
-    if (style.arrow === 'start' || style.arrow === 'both') {
-        visualPath.setAttribute("marker-start", `url(#${markerStartId})`);
-    }
-    svgLayer.appendChild(visualPath);
+    // 5. ★★★ 見た目用の線（ここを書き換え！） ★★★
 
+    // 二重線の場合
+    if (isDouble) {
+        // ① 下地となる太い線（線の色）
+        const outerPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        outerPath.setAttribute("d", d);
+        outerPath.setAttribute("class", "connection-line-outer");
+        outerPath.style.pointerEvents = "none";
+        outerPath.style.stroke = isSelected ? '#007bff' : style.color;
+        outerPath.style.strokeWidth = w * 3; // 3倍の太さ
+        outerPath.style.fill = "none";
+        // 矢印はこっちにつける
+        if (style.arrow === 'end' || style.arrow === 'both') outerPath.setAttribute("marker-end", `url(#${markerEndId})`);
+        if (style.arrow === 'start' || style.arrow === 'both') outerPath.setAttribute("marker-start", `url(#${markerStartId})`);
+        svgLayer.appendChild(outerPath);
 
-    // 6. ラベル（文字）の描画（縦書き改行 修正版）
+        // ② 上に乗せる細い線（背景色！）
+        // ★ここでアプリの背景色を取得して使うの！
+        const bgColor = appSettings.backgroundColor || '#f0f2f5';
+        
+        const innerPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        innerPath.setAttribute("d", d);
+        innerPath.setAttribute("class", "connection-line-inner");
+        innerPath.style.pointerEvents = "none";
+        innerPath.style.stroke = bgColor; // 背景色で塗る
+        innerPath.style.strokeWidth = w;  // 元の太さ
+        innerPath.style.fill = "none";
+        svgLayer.appendChild(innerPath);
+
+    } else {
+        // 通常（実線・破線）
+        const visualPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        visualPath.setAttribute("d", d);
+        visualPath.setAttribute("class", "connection-line");
+        visualPath.style.pointerEvents = "none";
+        visualPath.style.stroke = isSelected ? '#007bff' : style.color;
+        visualPath.style.strokeWidth = w;
+        visualPath.style.fill = "none";
+
+        if (style.dash === 'dashed') {
+            const dashLen = w * 4;
+            const gapLen = w * 2.5;
+            visualPath.style.strokeDasharray = `${dashLen}, ${gapLen}`;
+        }
+
+        if (style.arrow === 'end' || style.arrow === 'both') visualPath.setAttribute("marker-end", `url(#${markerEndId})`);
+        if (style.arrow === 'start' || style.arrow === 'both') visualPath.setAttribute("marker-start", `url(#${markerStartId})`);
+        
+        svgLayer.appendChild(visualPath);
+    }
+
+    // 6. ラベル（変更なし）
+    // ... (ラベル描画のコードはそのまま残してね！) ...
+    // ↓ ここから下は変更なしでOK（省略するけど、元のコードを維持してね）
     if (conn.label && conn.label.text) {
+        // ... (元のラベル描画コード) ...
         const l = conn.label;
         const cx = (startPos.x + endPos.x) / 2 + (l.offsetX || 0);
         const cy = (startPos.y + endPos.y) / 2 + (l.offsetY || 0);
@@ -1125,22 +1123,17 @@ function drawConnection(conn, updatedIds) {
         const lines = l.text.split('\n');
         const fSize = l.fontSize || 12;
         const lineHeight = 1.2;
-
-        // --- 背景（矩形）のサイズ計算 ---
         const maxLineLen = Math.max(...lines.map(line => line.length));
 
         let wRect, hRect;
         if (l.isVertical) {
-            // 縦書き：幅＝行数、高さ＝最長行
             wRect = lines.length * (fSize * lineHeight) + 10;
             hRect = maxLineLen * fSize + 10;
         } else {
-            // 横書き：幅＝最長行、高さ＝行数
             wRect = maxLineLen * fSize + 10;
             hRect = lines.length * (fSize * lineHeight) + 10;
         }
 
-        // 背景描画
         if (l.bgColor && l.bgColor !== 'transparent') {
             const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
             bg.setAttribute("x", cx - wRect / 2);
@@ -1149,14 +1142,11 @@ function drawConnection(conn, updatedIds) {
             bg.setAttribute("height", hRect);
             bg.setAttribute("fill", l.bgColor);
             bg.setAttribute("rx", 4);
-
             bg.style.pointerEvents = 'all';
-
             bg.addEventListener('dblclick', (e) => {
                 e.stopPropagation(); e.preventDefault();
                 startDirectEdit('conn', conn.id);
             });
-
             bg.style.cursor = (conn.id === selectedConnId) ? "move" : "pointer";
             registerInteraction(bg, { type: 'conn-label', connId: conn.id });
             bg.addEventListener('contextmenu', (e) => {
@@ -1167,9 +1157,7 @@ function drawConnection(conn, updatedIds) {
             svgLayer.appendChild(bg);
         }
 
-        // 文字描画
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-
         let adjX = 0;
         let adjY = 0;
         if (l.isVertical) {
@@ -1180,66 +1168,40 @@ function drawConnection(conn, updatedIds) {
             adjX = 0;
             adjY = 1;
         }
-
-        // text要素自体には座標をセットせず、tspanで制御するスタイルに変更してもいいけど、
-        // 基準点としてセットしておくわ
         text.setAttribute("x", cx + adjX);
         text.setAttribute("y", cy + adjY);
-
         text.setAttribute("fill", l.color || '#333');
         text.setAttribute("font-size", fSize);
         text.setAttribute("font-weight", l.fontWeight || 'normal');
         text.setAttribute("text-anchor", "middle");
         text.setAttribute("dominant-baseline", "central");
-
         text.style.pointerEvents = "all";
-
         text.addEventListener('dblclick', (e) => {
             e.stopPropagation(); e.preventDefault();
             startDirectEdit('conn', conn.id);
         });
-
         text.style.cursor = (conn.id === selectedConnId) ? "move" : "pointer";
 
-        // ★修正ポイント：縦書き・横書きで行送りの計算を変える！
         lines.forEach((lineStr, index) => {
             const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
             tspan.textContent = lineStr;
 
             if (l.isVertical) {
-                // === 縦書き (vertical-rl) の場合 ===
-                // 行を変える ＝ 「左（X軸マイナス方向）」へずらすこと
-                // index 0（1行目）が一番右に来るように計算するわ
-
-                // 中心からのオフセット量（行数に基づいて計算）
-                // 例: 2行なら、0行目は +0.5幅、1行目は -0.5幅 の位置
                 const lineOffset = (lines.length - 1) / 2 - index;
-
-                // 行間を含めた移動量
                 const xPos = cx + adjX + (lineOffset * (fSize * lineHeight));
-
                 tspan.setAttribute("x", xPos);
-                tspan.setAttribute("y", cy + adjY); // Yは中心固定（文字数で勝手に伸びる）
-
+                tspan.setAttribute("y", cy + adjY);
             } else {
-                // === 横書きの場合 ===
-                // 行を変える ＝ 「下（Y軸プラス方向）」へずらすこと (dyを使用)
-
-                tspan.setAttribute("x", cx + adjX); // Xは中心固定
-
+                tspan.setAttribute("x", cx + adjX);
                 if (index === 0) {
-                    // 全体を垂直方向に中央寄せするための初期ズレ
                     const startDy = -((lines.length - 1) * lineHeight) / 2;
                     tspan.setAttribute("dy", startDy + "em");
                 } else {
-                    // 2行目以降は下へ
                     tspan.setAttribute("dy", lineHeight + "em");
                 }
             }
-
             text.appendChild(tspan);
         });
-
         registerInteraction(text, { type: 'conn-label', connId: conn.id });
         text.addEventListener('contextmenu', (e) => {
             e.preventDefault(); e.stopPropagation();
@@ -1689,10 +1651,9 @@ function createGroupFromSelection() {
         moveToBack(n.id); // "front" ではなく、描画ループの最後＝手前
     });
 
-    // 選択をグループ親に切り替え
-    selectNode(groupId);
     closeAlignMenu(); // メニュー閉じる
     refreshScreen();
+    selectNode(groupId);
     recordHistory();
 }
 
@@ -2358,20 +2319,60 @@ function updateConnPreview(conn) {
         if (p.y > maxY) maxY = p.y;
     });
 
-    // スタイル適用
-    line.setAttribute("d", d);
-    line.setAttribute("stroke", s.color || '#555');
-    line.setAttribute("stroke-width", w);
+    // 一旦既存の属性をリセット
+    line.setAttribute("stroke-dasharray", "none");
+    line.style.display = 'block';
 
-    if (s.dash === 'dashed') {
-        const dashLen = w * 4;
-        const gapLen = w * 2.5;
-        line.setAttribute("stroke-dasharray", `${dashLen}, ${gapLen}`);
-    } else {
-        line.setAttribute("stroke-dasharray", "none");
+    // プレビュー用にもう一本線（中抜き用）を用意するわ
+    // HTMLには書かずに、ここで動的に作っちゃうテクニックよ！
+    let previewInnerLine = document.getElementById('preview-conn-line-inner');
+    if (!previewInnerLine) {
+        // なければ作る（クローンしてIDを変えて追加）
+        previewInnerLine = line.cloneNode(true);
+        previewInnerLine.id = 'preview-conn-line-inner';
+        // lineの兄弟として追加
+        line.parentNode.appendChild(previewInnerLine);
     }
-    line.setAttribute("fill", "none");
 
+    if (s.dash === 'double') {
+        // === 二重線モード ===
+        // アプリの背景色を取得（これで透けてるように見せる！）
+        const bgColor = appSettings.backgroundColor || '#f0f2f5';
+        
+        // 1. 下の線（太い線・線の色）
+        line.setAttribute("d", d);
+        line.setAttribute("stroke", s.color || '#555');
+        line.setAttribute("stroke-width", w * 3); // 3倍の太さ
+        line.setAttribute("fill", "none");
+        
+        // 2. 上の線（細い線・背景色で中抜き）
+        previewInnerLine.style.display = 'block';
+        previewInnerLine.setAttribute("d", d);
+        previewInnerLine.setAttribute("stroke", bgColor); // ここがミソ！
+        previewInnerLine.setAttribute("stroke-width", w); // 元の太さ
+        previewInnerLine.setAttribute("fill", "none");
+        
+        // 内側の線には矢印をつけない
+        previewInnerLine.setAttribute("marker-end", "");
+        previewInnerLine.setAttribute("marker-start", "");
+        
+    } else {
+        // === 通常モード（実線・破線） ===
+        previewInnerLine.style.display = 'none'; // 内側の線は隠す
+        
+        line.setAttribute("d", d);
+        line.setAttribute("stroke", s.color || '#555');
+        line.setAttribute("stroke-width", w);
+        line.setAttribute("fill", "none");
+
+        if (s.dash === 'dashed') {
+            const dashLen = w * 4;
+            const gapLen = w * 2.5;
+            line.setAttribute("stroke-dasharray", `${dashLen}, ${gapLen}`);
+        } else {
+            line.setAttribute("stroke-dasharray", "none");
+        }
+    }
 
     // 1. マーカーの色を、線の色と同期させる
 
@@ -5069,11 +5070,12 @@ document.getElementById('btn-save').addEventListener('click', () => {
     const currentTitle = appSettings.title || '人物相関図';
 
     const saveData = {
-        version: "0.5",
+        version: "1.4",
         timestamp: new Date().toISOString(),
         appSettings: appSettings,
         nodes: nodes,
-        connections: connections
+        connections: connections,
+        palettes: globalPaletteColors
     };
 
     const jsonString = JSON.stringify(saveData, null, 2);
@@ -5129,6 +5131,14 @@ document.getElementById('file-input').addEventListener('change', (e) => {
             connections = data.connections;
             if (data.appSettings) {
                 appSettings = data.appSettings;
+            }
+
+            // パレット情報の復元
+            if (data.palettes && Array.isArray(data.palettes)) {
+                // 保存されていたパレットで上書き
+                globalPaletteColors = data.palettes;
+                // 画面上のパレットボタンを作り直して反映！
+                initColorPalettes();
             }
 
             // 画面反映
@@ -5922,3 +5932,14 @@ initNodes();
 render();
 updateGuideVisibility();
 recordHistory();
+
+
+/*
+バージョン書き換えメモ
+
+document.getElementById('btn-save').addEventListener('click', () => {
+という、保存ボタン内のバージョン。
+
+HTMLのヘッダーのバージョン。
+
+*/
