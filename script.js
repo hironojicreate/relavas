@@ -2,7 +2,7 @@
 
 // ====== 設定・定数 ======
 const ANCHOR_COUNT = 21;
-const SNAP_DISTANCE = 30;
+const SNAP_DISTANCE = 10;
 
 // ====== 便利関数（マウス・タッチ共通化） ======
 
@@ -653,13 +653,15 @@ function initColorPalettes() {
     const normalPalettes = [
         { id: 'palette-text', target: 'text' },
         { id: 'palette-text-bg', target: 'text-bg' },
+        { id: 'palette-text-border', target: 'text-border' }, // ★追加
         { id: 'palette-bg', target: 'bg' },         // ★新規：背景色
         { id: 'palette-border', target: 'border' }, // 枠線の色
 
         // 矢印用
         { id: 'palette-conn-stroke', target: 'conn-stroke' },
         { id: 'palette-conn-text', target: 'conn-text' },
-        { id: 'palette-conn-bg', target: 'conn-bg' }
+        { id: 'palette-conn-bg', target: 'conn-bg' },
+        { id: 'palette-conn-border', target: 'conn-border' } // ★追加
     ];
 
     normalPalettes.forEach(p => {
@@ -782,33 +784,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     });
 });
 
-// ====== 新しいパレットの初期化設定 ======
-// initColorPalettes関数の中身を、新しいIDに合わせて少し修正が必要よ。
-// 以下のリストを使って初期化するように修正してね。
-
-/* function initColorPalettes() の中の normalPalettes 配列をこれに置き換えて！
-const normalPalettes = [
-    { id: 'palette-text', target: 'text' },
-    { id: 'palette-text-bg', target: 'text-bg' },
-    { id: 'palette-bg', target: 'bg' },         // ★新規（背景色）
-    { id: 'palette-border', target: 'border' },
-    
-    // 矢印用
-    { id: 'palette-conn-stroke', target: 'conn-stroke' },
-    { id: 'palette-conn-text', target: 'conn-text' },
-    { id: 'palette-conn-bg', target: 'conn-bg' }
-];
-*/
-
-// ★そして applyColor 関数にも、新しい 'bg' ターゲットの処理を追加！
-/*
-else if (target === 'bg') {
-    if (!node.style) node.style = {};
-    node.style.backgroundColor = color;
-    updatePaletteActiveState('palette-bg', color);
-    refreshNodeStyle(node);
-}
-*/
 
 // 3. トグルボタンのイベント設定（ここは1回だけ実行されればOKなので、関数の外に出す！）
 document.querySelectorAll('.toggle-group > button').forEach(btn => {
@@ -930,8 +905,9 @@ function render() {
 
 
 // 線を描画する関数
+// 線を描画する関数
 function drawConnection(conn, updatedIds) {
-    // 1. 基本座標（変更なし）
+    // 1. 基本座標
     let startPos = (conn.start.type === 'anchor')
         ? getAnchorCoordinate(conn.start.nodeId, conn.start.side, conn.start.index)
         : { x: conn.start.x, y: conn.start.y };
@@ -945,12 +921,10 @@ function drawConnection(conn, updatedIds) {
     const w = style.width || 2;
     const isDouble = (style.dash === 'double');
 
-    // 矢印サイズ計算（二重線の時は太めに）
+    // 矢印サイズ計算
     const visualWidth = isDouble ? w * 3 : w;
-    const arrowBaseSize = 12 + (visualWidth * 0.5); // 少し調整
+    const arrowBaseSize = 12 + (visualWidth * 0.5);
     const arrowLen = arrowBaseSize * 1.3;
-
-    // 矢印マーカーのサイズに合わせて隙間を調整
     const gapSize = arrowLen + 4;
     const marginSize = 6;
 
@@ -1019,7 +993,6 @@ function drawConnection(conn, updatedIds) {
     createMarker(markerEndId, 'end');
     createMarker(markerStartId, 'start');
 
-
     // 4. 当たり判定（Hit Area）
     const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
     hitPath.setAttribute("d", d);
@@ -1029,15 +1002,9 @@ function drawConnection(conn, updatedIds) {
     hitPath.onmousedown = (e) => handleLineMouseDown(e, conn);
     hitPath.addEventListener('contextmenu', (e) => {
         e.preventDefault(); e.stopPropagation();
-        // ケース1: 既にこれが「複数選択の一部」として選ばれている場合
         if (selectedConnIds.has(conn.id) && selectedConnIds.size >= 2) {
-             // 選択を維持したままメニューを開く
-             // (editingConnId にはこの矢印を設定して、代表として値を表示させる)
-             openContextMenu(conn, 'connection', e.clientX, e.clientY);
-        }
-        // ケース2: 単一選択、あるいは未選択の状態
-        else {
-            // これだけを選択してメニューを開く
+            openContextMenu(conn, 'connection', e.clientX, e.clientY);
+        } else {
             selectConnection(conn.id);
             openContextMenu(conn, 'connection', e.clientX, e.clientY);
         }
@@ -1056,9 +1023,8 @@ function drawConnection(conn, updatedIds) {
         circle.onmousedown = (e) => handleLineMouseDown(e, conn);
         circle.addEventListener('contextmenu', (e) => {
             e.preventDefault(); e.stopPropagation();
-
             if (selectedConnIds.has(conn.id) && selectedConnIds.size >= 2) {
-                 openContextMenu(conn, 'connection', e.clientX, e.clientY);
+                openContextMenu(conn, 'connection', e.clientX, e.clientY);
             } else {
                 selectConnection(conn.id);
                 openContextMenu(conn, 'connection', e.clientX, e.clientY);
@@ -1073,47 +1039,37 @@ function drawConnection(conn, updatedIds) {
         const highlightPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
         highlightPath.setAttribute("d", d);
         highlightPath.setAttribute("class", "connection-highlight");
-        highlightPath.style.pointerEvents = "none"; // クリックは邪魔しない
-        
-        // 青い太線（半透明）
+        highlightPath.style.pointerEvents = "none";
         highlightPath.style.stroke = "#007bff";
-        // 本体の線(w)より少し太くする (最低6px、太さに応じて+4px)
-        highlightPath.style.strokeWidth = Math.max(6, w + 4); 
-        highlightPath.style.strokeOpacity = "0.2"; // 半分透けさせる
+        highlightPath.style.strokeWidth = Math.max(6, w + 4);
+        highlightPath.style.strokeOpacity = "0.2";
         highlightPath.style.fill = "none";
         highlightPath.style.strokeLinecap = "round";
         highlightPath.style.strokeLinejoin = "round";
-        
         svgLayer.appendChild(highlightPath);
     }
 
-    // 5. ★★★ 見た目用の線（ここを書き換え！） ★★★
-
-    // 二重線の場合
+    // 5. 見た目用の線
     if (isDouble) {
-        // ① 下地となる太い線（線の色）
+        // 二重線
         const outerPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
         outerPath.setAttribute("d", d);
         outerPath.setAttribute("class", "connection-line-outer");
         outerPath.style.pointerEvents = "none";
         outerPath.style.stroke = style.color;
-        outerPath.style.strokeWidth = w * 3; // 3倍の太さ
+        outerPath.style.strokeWidth = w * 3;
         outerPath.style.fill = "none";
-        // 矢印はこっちにつける
         if (style.arrow === 'end' || style.arrow === 'both') outerPath.setAttribute("marker-end", `url(#${markerEndId})`);
         if (style.arrow === 'start' || style.arrow === 'both') outerPath.setAttribute("marker-start", `url(#${markerStartId})`);
         svgLayer.appendChild(outerPath);
 
-        // ② 上に乗せる細い線（背景色！）
-        // ★ここでアプリの背景色を取得して使うの！
         const bgColor = appSettings.backgroundColor || '#f0f2f5';
-
         const innerPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
         innerPath.setAttribute("d", d);
         innerPath.setAttribute("class", "connection-line-inner");
         innerPath.style.pointerEvents = "none";
-        innerPath.style.stroke = bgColor; // 背景色で塗る
-        innerPath.style.strokeWidth = w;  // 元の太さ
+        innerPath.style.stroke = bgColor;
+        innerPath.style.strokeWidth = w;
         innerPath.style.fill = "none";
         svgLayer.appendChild(innerPath);
 
@@ -1139,11 +1095,8 @@ function drawConnection(conn, updatedIds) {
         svgLayer.appendChild(visualPath);
     }
 
-    // 6. ラベル（変更なし）
-    // ... (ラベル描画のコードはそのまま残してね！) ...
-    // ↓ ここから下は変更なしでOK（省略するけど、元のコードを維持してね）
+    // 6. ラベル
     if (conn.label && conn.label.text) {
-        // ... (元のラベル描画コード) ...
         const l = conn.label;
         const cx = (startPos.x + endPos.x) / 2 + (l.offsetX || 0);
         const cy = (startPos.y + endPos.y) / 2 + (l.offsetY || 0);
@@ -1162,13 +1115,28 @@ function drawConnection(conn, updatedIds) {
             hRect = lines.length * (fSize * lineHeight) + 10;
         }
 
-        if (l.bgColor && l.bgColor !== 'transparent') {
+        // ★書き換え: 背景色がある OR 枠線色がある 場合に矩形を描画
+        const hasBg = (l.bgColor && l.bgColor !== 'transparent');
+        const hasBorder = (l.borderColor && l.borderColor !== 'transparent');
+
+        if (hasBg || hasBorder) {
             const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
             bg.setAttribute("x", cx - wRect / 2);
             bg.setAttribute("y", cy - hRect / 2);
             bg.setAttribute("width", wRect);
             bg.setAttribute("height", hRect);
-            bg.setAttribute("fill", l.bgColor);
+
+            // 塗り: 背景なしなら "none"
+            bg.setAttribute("fill", hasBg ? l.bgColor : "none");
+
+            // 線: 枠ありなら色指定
+            if (hasBorder) {
+                bg.setAttribute("stroke", l.borderColor);
+                bg.setAttribute("stroke-width", "1");
+            } else {
+                bg.setAttribute("stroke", "none");
+            }
+
             bg.setAttribute("rx", 4);
             bg.style.pointerEvents = 'all';
             bg.addEventListener('dblclick', (e) => {
@@ -1185,6 +1153,7 @@ function drawConnection(conn, updatedIds) {
             svgLayer.appendChild(bg);
         }
 
+        // テキスト描画
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
         let adjX = 0;
         let adjY = 0;
@@ -1264,7 +1233,7 @@ function createOrUpdateHandle(conn, type, pos, updatedIds) {
         registerInteraction(el, { type: 'handle', connId: conn.id, handleType: type });
 
         el.addEventListener('contextmenu', (e) => {
-            e.preventDefault(); 
+            e.preventDefault();
             e.stopPropagation();
 
             // 複数選択中なら、それを崩さないようにするわ！
@@ -1311,7 +1280,7 @@ function createOrUpdateWaypoint(conn, index, pos, updatedIds) {
         registerInteraction(el, { type: 'waypoint', connId: conn.id, index: index });
 
         el.addEventListener('contextmenu', (e) => {
-            e.preventDefault(); 
+            e.preventDefault();
             e.stopPropagation();
 
             // ここでも複数選択をチェック！
@@ -1891,6 +1860,7 @@ function openContextMenu(targetData, type, mouseX, mouseY) {
         document.getElementById('input-font-size').value = t.fontSize || 14;
         updateToggleActiveState('preset-font-size', String(t.fontSize || 14));
         updatePaletteActiveState('palette-text-bg', t.bgColor || 'transparent');
+        updatePaletteActiveState('palette-text-border', t.borderColor || 'transparent');
         updateToggleActiveState('toggle-text-shadow', t.shadow || 'none');
 
         const btnBold = document.getElementById('btn-font-bold');
@@ -1978,6 +1948,7 @@ function openContextMenu(targetData, type, mouseX, mouseY) {
         document.getElementById('input-conn-font-size').value = l.fontSize || 12;
         updateToggleActiveState('preset-conn-font-size', String(l.fontSize || 12));
         updatePaletteActiveState('palette-conn-bg', l.bgColor || 'transparent');
+        updatePaletteActiveState('palette-conn-border', l.borderColor || 'transparent');
 
         const btnBold = document.getElementById('btn-conn-bold');
         if (l.fontWeight === 'bold') btnBold.classList.add('active');
@@ -2115,7 +2086,7 @@ function updateNodeProperty(category, key, value) {
             node[category][key] = value;
 
             refreshNodeStyle(node);
-            
+
             // もしこれが「代表ノード（編集中）」ならプレビューも更新
             if (id === editingNodeId) updatePreview(node);
         }
@@ -2216,8 +2187,8 @@ function updateConnProperty(category, key, value) {
 
 function applyColor(target, color) {
     // 1. ノード（人物・ボックス）
-    if (['bg', 'border', 'text', 'text-bg'].includes(target)) {
-        
+    if (['bg', 'border', 'text', 'text-bg', 'text-border'].includes(target)) {
+
         const targets = new Set(selectedNodeIds);
         if (editingNodeId) targets.add(editingNodeId);
 
@@ -2245,16 +2216,21 @@ function applyColor(target, color) {
                 node.text.bgColor = color;
                 if (id === editingNodeId) updatePaletteActiveState('palette-text-bg', color);
             }
+            else if (target === 'text-border') {
+                if (!node.text) node.text = {};
+                node.text.borderColor = color;
+                if (id === editingNodeId) updatePaletteActiveState('palette-text-border', color);
+            }
             refreshNodeStyle(node);
         });
-        
+
     }
     // 2. 矢印（一括適用対応）
     else {
         // 矢印も複数選択に対応させるわ！
         const targets = new Set(selectedConnIds);
         if (editingConnId) targets.add(editingConnId);
-        
+
         targets.forEach(id => {
             const conn = connections.find(c => c.id === id);
             if (!conn) return;
@@ -2272,9 +2248,14 @@ function applyColor(target, color) {
                 conn.label.bgColor = color;
                 if (id === editingConnId) updatePaletteActiveState('palette-conn-bg', color);
             }
+            else if (target === 'conn-border') {
+                if (!conn.label) conn.label = {};
+                conn.label.borderColor = color;
+                if (id === editingConnId) updatePaletteActiveState('palette-conn-border', color);
+            }
             if (id === editingConnId) updateConnPreview(conn);
         });
-        
+
         render(); // 全体更新
     }
     recordHistory();
@@ -2697,6 +2678,7 @@ function applyShadow(target, val) {
 // ノードとプレビューのスタイルを一括更新する便利関数（縮小表示対応版）
 // refreshNodeStyle 関数（統合・透過率修正版）
 
+// ノードとプレビューのスタイルを一括更新する便利関数（縮小表示対応版）
 function refreshNodeStyle(node) {
     const el = document.getElementById(node.id);
     const label = document.getElementById('label-' + node.id);
@@ -2708,6 +2690,10 @@ function refreshNodeStyle(node) {
     const previewText = document.getElementById('preview-text');
     const isEditing = (editingNodeId === node.id);
 
+    // ヘルパー関数: スタイル取得（なければデフォルト）
+    function nodeDataStyle(key, def) {
+        return (node.style && node.style[key] !== undefined) ? node.style[key] : def;
+    }
 
     // 1. サイズ
     const w = node.style?.width || 120;
@@ -2715,7 +2701,7 @@ function refreshNodeStyle(node) {
     el.style.width = w + 'px';
     el.style.height = h + 'px';
 
-    // 2. 枠線 & 角丸（ここを整理！）
+    // 2. 枠線 & 角丸
     el.style.borderColor = nodeDataStyle('borderColor', '#333333');
 
     // ★枠線の太さを先に取得
@@ -2723,8 +2709,7 @@ function refreshNodeStyle(node) {
     el.style.borderWidth = borderWidth + 'px';
     el.style.borderStyle = nodeDataStyle('borderStyle', 'solid');
 
-    // === 角丸の計算（重複を消してこれ1つにする！） ===
-
+    // === 角丸の計算 ===
     // 角丸の強さ (0〜100) を取得
     const rPercent = nodeDataStyle('borderRadius', 10);
 
@@ -2741,22 +2726,20 @@ function refreshNodeStyle(node) {
     if (imgLayer) {
         // 本体の半径から枠線の太さを引く！
         const innerRadius = Math.max(0, rPx - borderWidth);
-
         imgLayer.style.borderRadius = innerRadius + 'px';
         imgLayer.style.overflow = 'hidden';
     }
 
-    // 3. ★修正：塗りと透過（ここが変わった！）
+    // 3. 塗りと透過
     const bgCol = nodeDataStyle('backgroundColor', '#ffffff');
     const op = nodeDataStyle('opacity', 100); // 塗りの透過率
 
-    // el.style.opacity ではなく、背景色をRGBAにする
+    // 背景色をRGBAにする
     el.style.backgroundColor = hexToRgba(bgCol, op);
-
-    // 本体自体の透明度はリセット（これをしないと全部消えちゃう）
+    // 本体自体の透明度はリセット
     el.style.opacity = '1';
 
-    // 4. ★修正：画像と画像の透過
+    // 4. 画像と画像の透過
     const bgImg = nodeDataStyle('backgroundImage', 'none');
     const imgOp = nodeDataStyle('imageOpacity', 100); // 画像の透過率
 
@@ -2764,41 +2747,48 @@ function refreshNodeStyle(node) {
         imgLayer.style.backgroundImage = bgImg;
         imgLayer.style.opacity = imgOp / 100;
     }
-    // (el.style.backgroundImage はもう使わないので消すか上書き)
+    // (el.style.backgroundImage はもう使わないので消す)
     el.style.backgroundImage = 'none';
 
-    // 5. 影 (そのまま)
+    // 5. 影
     const bShd = nodeDataStyle('boxShadow', 'none');
-    // ... (影のロジックは既存と同じ)
     let boxCss = 'none';
     if (bShd === 'black') boxCss = '0 4px 8px rgba(0,0,0,0.4)';
     else if (bShd === 'white') boxCss = '0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(255,255,255,0.4)';
     el.style.boxShadow = boxCss;
 
-    // 6. 文字スタイル (そのまま)
-    // ... (label.style... の部分は既存と同じ) ...
-    // ↓短縮のためヘルパー関数を使って書くけど、手元のコードはそのままでもOKよ
+    // 6. 文字スタイル
     const t = node.text || {};
     label.style.color = t.color || '#333';
     label.style.fontSize = (t.fontSize || 14) + 'px';
     label.style.fontWeight = t.fontWeight || 'normal';
     label.style.textAlign = t.align || 'center';
     label.style.textShadow = (t.shadow === 'black') ? '1px 1px 2px rgba(0,0,0,0.6)' : (t.shadow === 'white' ? '1px 1px 2px white' : 'none');
+
     const txtBgCol = t.bgColor || 'transparent';
+    const txtBorderCol = t.borderColor || 'transparent'; // ★追加: 文字枠色
+
     label.style.backgroundColor = txtBgCol;
-    label.style.padding = (txtBgCol !== 'transparent') ? '2px 4px' : '0';
-    label.style.borderRadius = (txtBgCol !== 'transparent') ? '4px' : '0';
+
+    // ★変更: 背景があるか、枠線があるならパディングをつける
+    if (txtBgCol !== 'transparent' || txtBorderCol !== 'transparent') {
+        label.style.padding = '2px 4px';
+        label.style.borderRadius = '4px';
+    } else {
+        label.style.padding = '0';
+        label.style.borderRadius = '0';
+    }
+
+    // ★追加: 文字枠線を適用
+    label.style.border = (txtBorderCol !== 'transparent') ? `1px solid ${txtBorderCol}` : 'none';
 
     const tx = t.x !== undefined ? t.x : w / 2;
     const ty = t.y !== undefined ? t.y : h / 2;
     label.style.left = tx + 'px';
     label.style.top = ty + 'px';
 
-
-    // --- プレビュー反映 (ここも透過ロジックを合わせる) ---
     // --- プレビュー反映 ---
     if (isEditing) {
-        // ... (サイズ計算ロジックはそのまま) ...
         const MAX_W = 260; const MAX_H = 160;
         let scale = 1;
         if (w > MAX_W || h > MAX_H) scale = Math.min(MAX_W / w, MAX_H / h);
@@ -2823,48 +2813,34 @@ function refreshNodeStyle(node) {
         previewBox.style.backgroundColor = hexToRgba(bgCol, op);
         previewBox.style.boxShadow = boxCss;
 
-        // ★★★ ここが追加魔法！プレビュー用画像レイヤーの生成と制御 ★★★
-
-        // 1. レイヤーがあるか探して、なければ作る
+        // プレビュー用画像レイヤー
         let previewImgLayer = previewBox.querySelector('.preview-bg-image');
         if (!previewImgLayer) {
             previewImgLayer = document.createElement('div');
             previewImgLayer.className = 'preview-bg-image';
-
-            // スタイル設定（CSSに書かずにここで完結させるわ）
             previewImgLayer.style.position = 'absolute';
             previewImgLayer.style.top = '0';
             previewImgLayer.style.left = '0';
             previewImgLayer.style.width = '100%';
             previewImgLayer.style.height = '100%';
-            previewImgLayer.style.borderRadius = 'inherit'; // 親の角丸を引き継ぐ
+            previewImgLayer.style.borderRadius = 'inherit';
             previewImgLayer.style.backgroundSize = 'cover';
             previewImgLayer.style.backgroundPosition = 'center';
             previewImgLayer.style.backgroundRepeat = 'no-repeat';
-            previewImgLayer.style.zIndex = '0'; // 文字より後ろ！
+            previewImgLayer.style.zIndex = '0';
             previewImgLayer.style.pointerEvents = 'none';
-
-            // プレビューボックスの一番最初に追加（文字の下に敷くため）
             previewBox.insertBefore(previewImgLayer, previewBox.firstChild);
         }
 
-        // 2. 画像と透明度をセット！
         previewImgLayer.style.backgroundImage = bgImg;
         previewImgLayer.style.opacity = imgOp / 100;
-
         const innerRadiusPreview = Math.max(0, parseFloat(el.style.borderRadius) - parseFloat(el.style.borderWidth));
         previewImgLayer.style.borderRadius = innerRadiusPreview + 'px';
-
-        // 3. 親の背景画像は消しておく（二重表示防止）
         previewBox.style.backgroundImage = 'none';
 
-        // ★★★ ここまで ★★★
-
-
-        // === テキストスタイルの同期（前回のコード） ===
+        // === テキストスタイルの同期 ===
         previewText.textContent = node.label;
-
-        previewText.style.zIndex = '1'; // 画像より手前に来るように念押し
+        previewText.style.zIndex = '1';
         previewText.style.color = label.style.color;
         previewText.style.fontSize = label.style.fontSize;
         previewText.style.fontWeight = label.style.fontWeight;
@@ -2874,16 +2850,13 @@ function refreshNodeStyle(node) {
         previewText.style.backgroundColor = label.style.backgroundColor;
         previewText.style.padding = label.style.padding;
         previewText.style.borderRadius = label.style.borderRadius;
+        // ★追加: プレビューにも枠線を反映
+        previewText.style.border = label.style.border;
 
         previewText.style.left = tx + 'px';
         previewText.style.top = ty + 'px';
 
-        // ハンドル逆スケール
         previewBox.querySelectorAll('.resize-handle').forEach(hd => hd.style.transform = `scale(${1 / scale})`);
-    }
-
-    function nodeDataStyle(key, def) {
-        return (node.style && node.style[key] !== undefined) ? node.style[key] : def;
     }
 }
 
@@ -3648,7 +3621,7 @@ function isOnNodeEdge(e, element) {
     return (x < margin || x > rect.width - margin || y < margin || y > rect.height - margin);
 }
 
-// 線の直線部分を押したときの処理
+
 // 線の直線部分を押したときの処理（大改造版）
 function handleLineMouseDown(e, conn) {
     if (e.button !== 0) return;
@@ -3662,9 +3635,12 @@ function handleLineMouseDown(e, conn) {
 
     // ★ 2. 非選択状態なら「描画モード」へ！
     if (selectedConnId !== conn.id && !selectedConnIds.has(conn.id)) {
-        // ここでクリックだけで終わるか、ドラッグするかは startDrawingLine 側で判断させるわ
-        // 「この線からスタートするよ」という情報を渡すの
-        startDrawingLine(e, null, conn);
+
+        // 【封印】誤操作防止のため、線からの描画機能は一時停止するの！
+        // startDrawingLine(e, null, conn); 
+
+        // 代わりに「ただ選択するだけ」にするわ
+        selectConnection(conn.id);
         return;
     }
 
@@ -5154,7 +5130,7 @@ document.getElementById('btn-save').addEventListener('click', () => {
     const currentTitle = appSettings.title || '人物相関図';
 
     const saveData = {
-        version: "1.5",
+        version: "1.6",
         timestamp: new Date().toISOString(),
         appSettings: appSettings,
         nodes: nodes,
@@ -5608,24 +5584,37 @@ function updateDrawingLine(e) {
     }
 
     // Shiftキーで垂直ロック
-    if (e.shiftKey && drawingSnapBaseVector) {
-        const dx = drawingSnapBaseVector.x;
-        const dy = drawingSnapBaseVector.y;
 
-        // 垂直ベクトル (-dy, dx)
-        const perpX = -dy;
-        const perpY = dx;
+    if (e.shiftKey) {
+        
+        // パターンA: 線から引いている場合（既存のベクトル計算）
+        if (drawingSnapBaseVector) {
+            const dx = drawingSnapBaseVector.x;
+            const dy = drawingSnapBaseVector.y;
+            const perpX = -dy;
+            const perpY = dx;
+            const startToMouseX = worldX - drawingStartData.x;
+            const startToMouseY = worldY - drawingStartData.y;
+            const len2 = perpX * perpX + perpY * perpY;
+            if (len2 !== 0) {
+                const t = (startToMouseX * perpX + startToMouseY * perpY) / len2;
+                worldX = drawingStartData.x + perpX * t;
+                worldY = drawingStartData.y + perpY * t;
+            }
+        }
+        
+        // ★ パターンB: ボックス（アンカー）から引いている場合（新規追加！）
+        else if (drawingStartData && drawingStartData.type === 'anchor') {
+            const side = drawingStartData.side; // 'top', 'bottom', 'left', 'right'
 
-        // 始点からマウスまでのベクトル
-        const startToMouseX = worldX - drawingStartData.x;
-        const startToMouseY = worldY - drawingStartData.y;
-
-        const len2 = perpX * perpX + perpY * perpY;
-        if (len2 !== 0) {
-            // 射影計算
-            const t = (startToMouseX * perpX + startToMouseY * perpY) / len2;
-            worldX = drawingStartData.x + perpX * t;
-            worldY = drawingStartData.y + perpY * t;
+            // 上下の辺から出ているなら、横には動かさない（縦固定）
+            if (side === 'top' || side === 'bottom') {
+                worldX = drawingStartData.x;
+            }
+            // 左右の辺から出ているなら、縦には動かさない（横固定）
+            else if (side === 'left' || side === 'right') {
+                worldY = drawingStartData.y;
+            }
         }
     }
 
@@ -5674,18 +5663,33 @@ function finishDrawingLine(e) {
     let worldY = (pos.y - viewport.y) / viewport.scale;
 
     // ★Shiftロックの最終計算（updateと同じロジック）
-    if (e.shiftKey && drawingSnapBaseVector) {
-        const dx = drawingSnapBaseVector.x;
-        const dy = drawingSnapBaseVector.y;
-        const perpX = -dy;
-        const perpY = dx;
-        const startToMouseX = worldX - drawingStartData.x;
-        const startToMouseY = worldY - drawingStartData.y;
-        const len2 = perpX * perpX + perpY * perpY;
-        if (len2 !== 0) {
-            const t = (startToMouseX * perpX + startToMouseY * perpY) / len2;
-            worldX = drawingStartData.x + perpX * t;
-            worldY = drawingStartData.y + perpY * t;
+
+    if (e.shiftKey) {
+        
+        // パターンA: 線から（既存）
+        if (drawingSnapBaseVector) {
+            const dx = drawingSnapBaseVector.x;
+            const dy = drawingSnapBaseVector.y;
+            const perpX = -dy;
+            const perpY = dx;
+            const startToMouseX = worldX - drawingStartData.x;
+            const startToMouseY = worldY - drawingStartData.y;
+            const len2 = perpX * perpX + perpY * perpY;
+            if (len2 !== 0) {
+                const t = (startToMouseX * perpX + startToMouseY * perpY) / len2;
+                worldX = drawingStartData.x + perpX * t;
+                worldY = drawingStartData.y + perpY * t;
+            }
+        }
+        
+        // ★ パターンB: ボックス（アンカー）から（新規追加！）
+        else if (drawingStartData && drawingStartData.type === 'anchor') {
+            const side = drawingStartData.side;
+            if (side === 'top' || side === 'bottom') {
+                worldX = drawingStartData.x;
+            } else if (side === 'left' || side === 'right') {
+                worldY = drawingStartData.y;
+            }
         }
     }
 
@@ -6002,7 +6006,11 @@ window.addEventListener('mousemove', (e) => {
         if (hit) {
             const isSelected = selectedConnIds.has(hit.connId) || selectedConnId === hit.connId;
             if (!isSelected) {
-                e.target.style.cursor = 'crosshair';
+                // 【封印】描画モード封印につき、十字カーソルも封印！
+                // e.target.style.cursor = 'crosshair';
+                
+                // 代わりに「クリックできるよ」という意味の指カーソルに
+                e.target.style.cursor = 'pointer';
             } else {
                 // e.target.style.cursor = 'move'; // または pointer
                 e.target.style.cursor = 'copy';

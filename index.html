@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RelaVas v1.5 - 相関図作成 -</title>
+    <title>RelaVas v1.6 - 相関図作成 -</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="RelaVasIco.png" type="image/png">
     <link rel="apple-touch-icon" href="RelaVasIco.png">
@@ -193,6 +193,9 @@
                     <div class="menu-section"><label class="menu-label">背景色</label>
                         <div id="palette-text-bg" class="color-palette"></div>
                     </div>
+                    <div class="menu-section"><label class="menu-label">文字枠</label>
+                        <div id="palette-text-border" class="color-palette"></div>
+                    </div>
                 </div>
 
                 <div id="tab-style" class="tab-content active">
@@ -264,9 +267,10 @@
                     </div>
                 </div>
 
-                <div id="section-align-group" style="display:none; border-top: 1px solid #eee; margin-top: 10px; padding-top: 10px;">
+                <div id="section-align-group"
+                    style="display:none; border-top: 1px solid #eee; margin-top: 10px; padding-top: 10px;">
                     <label class="menu-label" style="text-align:left; width:auto; margin-bottom:5px;">整列・グループ</label>
-                    
+
                     <div class="toggle-group" style="width:100%; margin-bottom: 4px;">
                         <button class="btn-align" data-type="left" title="左揃え">┣</button>
                         <button class="btn-align" data-type="center-h" title="左右中央">┃</button>
@@ -281,10 +285,12 @@
                         <button class="btn-align" data-type="dist-v" title="縦に等間隔">☰</button>
                     </div>
 
-                    <button id="btn-group-make" class="tool-btn" style="width:100%; justify-content:center;">🔗 グループ化</button>
+                    <button id="btn-group-make" class="tool-btn" style="width:100%; justify-content:center;">🔗
+                        グループ化</button>
                 </div>
                 <div class="menu-actions" style="margin-top:10px;">
-                    <button id="btn-group-ungroup" class="tool-btn" style="width:100%; justify-content:center; display:none;">🔓 グループ解除</button>
+                    <button id="btn-group-ungroup" class="tool-btn"
+                        style="width:100%; justify-content:center; display:none;">🔓 グループ解除</button>
 
 
                     <button id="btn-menu-delete" class="btn-danger">🗑️ 削除</button>
@@ -351,6 +357,9 @@
                     <div class="menu-section"><label class="menu-label">文字背景</label>
                         <div id="palette-conn-bg" class="color-palette"></div>
                     </div>
+                    <div class="menu-section"><label class="menu-label">文字枠</label>
+                        <div id="palette-conn-border" class="color-palette"></div>
+                    </div>
                 </div>
 
                 <div class="menu-actions" style="margin-top:10px;">
@@ -373,7 +382,7 @@
                     .catch((err) => console.log('Service Worker registration failed.', err));
             });
         }
-    </script> 
+    </script>
 
 
 </body>

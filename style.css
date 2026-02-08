@@ -599,7 +599,7 @@ html {
 
 /* メニューの本文エリア */
 .menu-body {
-    padding: 12px;
+    padding: 6px;
     /* 余白削減 */
 }
 
@@ -609,9 +609,9 @@ html {
     /* 横並びにする魔法 */
     align-items: center;
     /* 上下中央揃え */
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     /* 下の隙間をギュッと詰める */
-    gap: 10px;
+    gap: 5px;
     /* ラベルと中身の間の隙間 */
 }
 
@@ -794,7 +794,7 @@ html {
 .color-palette {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
-    gap: 4px;
+    gap: 2px;
     padding: 0;
     margin: 0;
     /* マージン削除 */
@@ -803,7 +803,7 @@ html {
 .color-btn {
     width: 22px;
     /* 少し小さく */
-    height: 22px;
+    height: 15px;
     border-radius: 50%;
     border: 1px solid #ddd;
     cursor: pointer;
@@ -997,7 +997,7 @@ html {
     border: none;
     height: 1px;
     background-color: #e1e4e8; /* 既存のデザインに合わせた薄いグレー */
-    margin: 10px 0;            /* 上下に少し余白を持たせる */
+    margin: 6px 0;            /* 上下に少し余白を持たせる */
     width: 100%;
 }
 
